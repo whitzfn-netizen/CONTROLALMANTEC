@@ -84,7 +84,7 @@ const S = {
   repF: { q: '', mes: '', estado: '', pago: '', sort: 'fecha', dir: -1, limit: 100 },
   movF: { q: '', mes: '', estado: '', cobro: '', sort: 'fecha_compra', dir: -1, limit: 100 },
   mesF: { month: curMonth(), act: 'all', sort: 'fecha', dir: -1 },
-  totF: { q: '', act: 'all', year: '', sort: 'fecha', dir: -1, limit: 100 },
+  totF: { q: '', act: 'all', year: '', mYear: curMonth().slice(0, 4), sort: 'fecha', dir: -1, limit: 100 },
 };
 const derived = () => {
   if (!S._d || S._d.rep !== S.rep || S._d.mov !== S.mov) {
@@ -1081,6 +1081,11 @@ const thSort = (label, key, st, cls = '') => {
   return `<th class="${cls} ${on ? 'sorted' : ''}" aria-sort="${on ? (st.dir < 0 ? 'descending' : 'ascending') : 'none'}"><button type="button" data-sort="${key}">${esc(label)}<span class="arr">${on && st.dir > 0 ? '▲' : '▼'}</span></button></th>`;
 };
 const emptyBox = (title, text, actions = '') => `<div class="empty"><div class="badge-i">${ICON.box}</div><h3>${esc(title)}</h3><p>${text}</p>${actions ? `<div class="row" style="justify-content:center">${actions}</div>` : ''}</div>`;
+// Los 12 meses de cada año con datos y del año actual, aunque estén vacíos, para ir rellenándolos.
+const yearMonths = keys => {
+  const yrs = [...new Set([curMonth().slice(0, 4), ...keys.filter(Boolean).map(k => k.slice(0, 4))])].sort();
+  return yrs.flatMap(y => MONTHS.map((_, i) => `${y}-${pad2(i + 1)}`));
+};
 const monthOptions = (keys, sel, allLabel) => `<option value="">${esc(allLabel)}</option>` + keys.map(k => `<option value="${k}" ${k === sel ? 'selected' : ''}>${esc(monthName(k))}</option>`).join('');
 function sortRows(rows, key, dir, getters) {
   const g = getters[key] || (r => r[key]);
@@ -1268,7 +1273,7 @@ VIEWS.rep = {
   },
   update(root) {
     const F = S.repF;
-    const months = [...new Set(S.rep.map(r => C.monthOf(r.fecha)))].sort().reverse();
+    const months = yearMonths(S.rep.map(r => C.monthOf(r.fecha))).reverse();
     $('#rMes', root).innerHTML = monthOptions(months, F.mes, 'Todos los meses');
     $('#rSort', root).value = F.sort;
     $('#rDir', root).innerHTML = F.dir < 0 ? ICON.down : ICON.up;
@@ -1364,7 +1369,7 @@ VIEWS.mov = {
       + kpi({ label: 'Reservados', value: String(d.inv.reservados), icon: ICON.clock, tone: 'o', sub: `${esc(eur(d.inv.invertidoRes))} invertidos` })
       + kpi({ label: 'Vendidos', value: String(sold.length), icon: ICON.trend, tone: 'g', sub: `Beneficio ${esc(eur(soldT.benef))}` })
       + kpi({ label: 'Ventas sin cobrar', value: eur(soldT.pendiente), icon: ICON.wallet, tone: 'r', sub: `${pendCobro.length} móvil${pendCobro.length === 1 ? '' : 'es'}` });
-    const months = [...new Set(S.mov.flatMap(m => [C.monthOf(m.fecha_compra), C.monthOf(m.fecha_venta)]).filter(Boolean))].sort().reverse();
+    const months = yearMonths(S.mov.flatMap(m => [C.monthOf(m.fecha_compra), C.monthOf(m.fecha_venta)])).reverse();
     $('#mMes', root).innerHTML = monthOptions(months, F.mes, 'Todos los meses');
     $('#mSort', root).value = F.sort;
     $('#mDir', root).innerHTML = F.dir < 0 ? ICON.down : ICON.up;
@@ -1425,7 +1430,7 @@ const actSwitch = (id, val) => `<div class="seg-switch" id="${id}">${[['all', 'T
 /* ---------- RESUMEN MENSUAL ---------- */
 VIEWS.mes = {
   shell: () => `
-    <div class="sec-h"><div><h2 id="msTitle"></h2><p>Solo las operaciones de ese mes. Los meses aparecen solos según las fechas.</p></div>
+    <div class="sec-h"><div><h2 id="msTitle"></h2><p>Los 12 meses del año. Elige uno para ver sus operaciones; los vacíos se rellenan solos al añadir registros con esa fecha.</p></div>
       <div class="yearbar"><button class="icon-btn" type="button" data-year="-1" aria-label="Año anterior">${ICON.left}</button><b id="msYear"></b><button class="icon-btn" type="button" data-year="1" aria-label="Año siguiente">${ICON.right}</button></div></div>
     <div class="months" id="msMonths" role="group" aria-label="Mes"></div>
     <section class="kpis k5" id="msK"></section>
@@ -1495,7 +1500,7 @@ VIEWS.total = {
       <div class="panel chart"><div class="chart-h"><h3>Beneficio acumulado</h3><span>Desde el primer registro</span></div><div class="plot" id="cCum"></div></div>
     </div>
     <section class="panel"><div class="toolbar"><h3 style="font-family:var(--f-display);margin:0;font-size:15px">Desglose anual</h3></div><div class="table-wrap cardify" id="tYears"></div></section>
-    <section class="panel"><div class="toolbar"><div class="chart-h"><h3 style="font-family:var(--f-display);margin:0;font-size:15px">Desglose mensual</h3><span>Pulsa un mes para verlo en detalle</span></div></div><div class="table-wrap cardify" id="tMonths"></div></section>
+    <section class="panel"><div class="toolbar"><div class="row" style="justify-content:space-between"><div class="chart-h"><h3 style="font-family:var(--f-display);margin:0;font-size:15px">Desglose mensual</h3><span>Los 12 meses · pulsa uno para verlo en detalle</span></div><div class="yearbar"><button class="icon-btn" type="button" data-tyear="-1" aria-label="Año anterior">${ICON.left}</button><b id="tMYear"></b><button class="icon-btn" type="button" data-tyear="1" aria-label="Año siguiente">${ICON.right}</button></div></div></div><div class="table-wrap cardify" id="tMonths"></div></section>
     <section class="panel">
       <div class="toolbar">
         <div class="row" style="justify-content:space-between"><h3 style="font-family:var(--f-display);margin:0;font-size:15px">Todas las operaciones</h3>${actSwitch('tAct', S.totF.act)}</div>
@@ -1515,6 +1520,7 @@ VIEWS.total = {
     $('#tCsv', root).addEventListener('click', () => exportOpsCsv(VIEWS.total.rows || []));
     root.addEventListener('click', e => {
       const a = e.target.closest('#tAct [data-act]'); if (a) { F.act = a.dataset.act; F.limit = 100; render(); return; }
+      const ty = e.target.closest('[data-tyear]'); if (ty) { S.totF.mYear = String(+S.totF.mYear + +ty.dataset.tyear); render(); return; }
       const mo = e.target.closest('[data-open-month]'); if (mo) { S.mesF.month = mo.dataset.openMonth; showTab('mes'); return; }
       const so = e.target.closest('#tList [data-sort]'); if (so) { const k = so.dataset.sort; if (F.sort === k) F.dir *= -1; else { F.sort = k; F.dir = -1; } render(); return; }
       if (e.target.closest('[data-more]')) { F.limit += 200; render(); return; }
@@ -1534,17 +1540,20 @@ VIEWS.total = {
       + kpi({ label: 'Inventario actual', value: String(d.inv.disponibles + d.inv.reservados), icon: ICON.box, tone: 'b', sub: `${esc(eur(d.inv.invertido))} invertidos sin vender` })
       + kpi({ label: 'Pendiente de cobrar', value: eur(t.pendiente), icon: ICON.wallet, tone: 'o', sub: `Reparaciones ${esc(eur(t.repPend))} · móviles ${esc(eur(t.movPend))}` });
     const keys = [...d.months.keys()].sort();
-    const months = keys.length ? C.monthRange(keys[0] < curMonth() ? keys[0] : curMonth(), keys.at(-1) > curMonth() ? keys.at(-1) : curMonth()) : C.lastMonths(curMonth(), 6);
+    const months = yearMonths(keys);
     const get = k => d.months.get(k) || C.emptyTotals();
-    const many = months.length > 13;
+    const many = months.length > 12;
     const labels = months.map(k => monthShort(k, many || k.slice(5) === '01' || k === months[0]));
     const titles = months.map(monthName);
     $('#tRange', root).textContent = months.length ? `${monthName(months[0])} – ${monthName(months.at(-1))}` : '';
     barChart($('#cEvo', root), { cats: months, labels, tipTitles: titles, series: [
       { ...SER.fact, values: months.map(k => get(k).fact) }, { ...SER.cost, values: months.map(k => get(k).costes) }, { ...SER.ben, values: months.map(k => get(k).benef) }] });
+    // El acumulado llega hasta el mes actual (o el último con datos): los meses futuros no tienen nada que sumar.
+    const lastM = keys.length && keys.at(-1) > curMonth() ? keys.at(-1) : curMonth();
+    const cm = months.filter(k => k <= lastM && (!keys.length || k >= keys[0]));
     let acc = 0;
-    const cum = months.map(k => (acc += get(k).benef));
-    lineChart($('#cCum', root), { cats: months, labels, tipTitles: titles, values: cum, color: 'var(--s-ben)', label: 'Acumulado', extraTip: i => [['Ese mes', eur(get(months[i]).benef)]] });
+    const cum = cm.map(k => (acc += get(k).benef));
+    lineChart($('#cCum', root), { cats: cm, labels: cm.map(k => monthShort(k, k.slice(5) === '01' || k === cm[0])), tipTitles: cm.map(monthName), values: cum, color: 'var(--s-ben)', label: 'Acumulado', extraTip: i => [['Ese mes', eur(get(cm[i]).benef)]] });
 
     const yrs = [...d.years.keys()].sort().reverse();
     const yRow = (label, x, attr = '') => `<tr ${attr}><td class="c-main"><span class="nm">${label}</span></td>
@@ -1555,7 +1564,10 @@ VIEWS.total = {
       <td class="r" data-label="Pendiente de cobro"><span class="${amtCls(x.pendiente)}">${eur(x.pendiente)}</span></td></tr>`;
     const head = first => `<thead><tr><th>${first}</th><th class="r">Facturación</th><th class="r">Costes</th><th class="r">Beneficio</th><th class="r">Benef. reparaciones</th><th class="r">Benef. móviles</th><th class="r">Reparaciones</th><th class="r">Móviles vendidos</th><th class="r">Pendiente</th></tr></thead>`;
     $('#tYears', root).innerHTML = yrs.length ? `<table>${head('Año')}<tbody>${yrs.map(y => yRow(y, d.years.get(y))).join('')}</tbody>${yrs.length > 1 ? `<tfoot>${yRow('Total', t).replace('<tr >', '<tr>')}</tfoot>` : ''}</table>` : emptyBox('Sin datos todavía', 'Aquí verás cada año cuando haya operaciones.');
-    $('#tMonths', root).innerHTML = keys.length ? `<table>${head('Mes')}<tbody>${keys.slice().reverse().map(k => yRow(esc(monthName(k)), d.months.get(k), `class="click" data-open-month="${k}"`)).join('')}</tbody></table>` : emptyBox('Sin datos todavía', 'Los meses aparecen solos según las fechas de las operaciones.');
+    const my = F.mYear;
+    $('#tMYear', root).textContent = my;
+    const ymk = MONTHS.map((_, i) => `${my}-${pad2(i + 1)}`);
+    $('#tMonths', root).innerHTML = `<table>${head('Mes')}<tbody>${ymk.map(k => yRow(esc(monthName(k)), get(k), `class="click${d.months.has(k) ? '' : ' empty-row'}" data-open-month="${k}"`)).join('')}</tbody><tfoot>${yRow('Total ' + my, d.years.get(my) || C.emptyTotals()).replace('<tr >', '<tr>')}</tfoot></table>`;
 
     $('#tYear', root).innerHTML = `<option value="">Todos</option>` + yrs.map(y => `<option ${y === F.year ? 'selected' : ''}>${y}</option>`).join('');
     $$('#tAct [data-act]', root).forEach(b => b.setAttribute('aria-pressed', b.dataset.act === F.act));
