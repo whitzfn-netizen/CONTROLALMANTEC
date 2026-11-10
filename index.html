@@ -10,8 +10,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
-<script src="config.js?v=20261110b"></script>
-<script src="calc.js?v=20261110b"></script>
+<script src="config.js?v=20261110d"></script>
+<script src="calc.js?v=20261110d"></script>
 <style>
 /* Estética de CONTROLVINTED: oscuro, tarjetas con borde sutil, Sora + Instrument Sans, verde/rojo/azul/naranja */
 :root{
@@ -119,10 +119,10 @@ svg.i.s{width:15px;height:15px}
 .sdots i{width:6px;height:6px;border-radius:50%;background:var(--c)}
 .sd.sel .sdots i{box-shadow:0 0 0 1px rgba(0,0,0,.25)}
 .sdots i.done{opacity:.35}
-.late{background:var(--orange-bg);border:1px solid rgba(245,161,74,.3);border-radius:var(--r);padding:0 14px}
-.late summary{cursor:pointer;list-style:none;display:flex;gap:8px;align-items:center;padding:12px 0;color:var(--orange);font-size:13.5px}
-.late summary::-webkit-details-marker{display:none}
-.late[open]{padding-bottom:14px}
+.late-box{background:var(--orange-bg);border:1px solid rgba(245,161,74,.3);border-radius:var(--r);padding:0 14px}
+.late-box summary{cursor:pointer;list-style:none;display:flex;gap:8px;align-items:center;padding:12px 0;color:var(--orange);font-size:13.5px}
+.late-box summary::-webkit-details-marker{display:none}
+.late-box[open]{padding-bottom:14px}
 .dlist{display:flex;flex-direction:column;gap:12px}
 .dday{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px 14px 14px;display:flex;flex-direction:column;gap:12px;box-shadow:var(--shadow);scroll-margin-top:12px}
 .dday.is-today{border-color:rgba(62,207,142,.45);background:linear-gradient(180deg,rgba(62,207,142,.07),transparent 70%),var(--card)}
@@ -164,6 +164,42 @@ svg.i.s{width:15px;height:15px}
 .quick{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:2px}
 .quick .chip{padding:5px 11px;font-size:12.5px}
 @media (max-width:560px){ .entry{grid-template-columns:50px minmax(0,1fr) auto;gap:10px;padding:11px 10px 11px 14px} .dd-date>b{font-size:26px;min-width:34px} .dday{padding:12px;border-radius:16px} }
+
+/* Estado de los días: verde todo hecho, naranja pendiente, rojo día pasado sin hacer */
+.st-legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--muted)}
+.st-legend span{display:inline-flex;align-items:center;gap:6px}
+.st-legend i{width:10px;height:10px;border-radius:3px}
+.st-legend i.ok,.dmark.ok{background:var(--green)} .st-legend i.pend,.dmark.pend{background:var(--orange)} .st-legend i.late,.dmark.late{background:var(--red)}
+.dmark{display:inline-grid;place-items:center;width:15px;height:15px;border-radius:50%;color:#0e1013;font-size:10.5px;font-weight:700;line-height:1;flex:none}
+.dmark.pend{width:9px;height:9px}
+.dmark svg.i{width:10px;height:10px;stroke-width:3}
+.cal-d .dn{justify-content:flex-start}
+.cal-d .dn .rc{margin-left:auto}
+.cal-d.st-ok{border-color:rgba(62,207,142,.6);background:linear-gradient(var(--green-bg),var(--green-bg)),var(--bg-2)}
+.cal-d.st-pend{border-color:rgba(245,161,74,.65);background:linear-gradient(var(--orange-bg),var(--orange-bg)),var(--bg-2)}
+.cal-d.st-late{border-color:rgba(242,109,109,.7);background:linear-gradient(var(--red-bg),var(--red-bg)),var(--bg-2)}
+.cal-d.st-late .dn b{color:var(--red)}
+.cal-d.sel{box-shadow:0 0 0 2px var(--fg) inset}
+.ev{cursor:pointer}
+.ev:hover{filter:brightness(1.25)}
+.ev.late{box-shadow:inset 3px 0 0 var(--red);background:var(--red-bg)}
+.ev.overdue{box-shadow:inset 3px 0 0 var(--orange);background:var(--orange-bg)}
+.sd.st-ok{border-color:var(--green);box-shadow:inset 0 -3px 0 var(--green)}
+.sd.st-pend{border-color:var(--orange);box-shadow:inset 0 -3px 0 var(--orange)}
+.sd.st-late{border-color:var(--red);box-shadow:inset 0 -3px 0 var(--red);opacity:1}
+.sd.sel.st-ok,.sd.sel.st-pend,.sd.sel.st-late{border-width:2px}
+.dday.st-ok{border-color:rgba(62,207,142,.5)}
+.dday.st-pend{border-color:rgba(245,161,74,.55)}
+.dday.st-late{border-color:rgba(242,109,109,.6);background:linear-gradient(180deg,var(--red-bg),transparent 60%),var(--card);opacity:1}
+.dd-date .dmark{align-self:flex-start;margin-left:-6px}
+.eb-st{display:inline-block;margin-top:5px;font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:99px}
+.eb-st.late{color:var(--red);background:var(--red-bg)}
+.eb-st.pend{color:var(--orange);background:var(--orange-bg)}
+.entry.late{border-color:rgba(242,109,109,.55)}
+.entry.overdue{border-color:rgba(245,161,74,.55)}
+.entry.done{opacity:.55}
+.entry.done h4{text-decoration:line-through}
+@media (max-width:700px){ .cal-d .dn{justify-content:center} .cal-d .dmark{position:absolute;top:4px;left:4px;width:12px;height:12px;font-size:9px} .cal-d .dmark.pend{width:8px;height:8px} .cal-d .dmark svg.i{width:8px;height:8px} }
 
 /* Cabecera */
 header.top{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap}
@@ -515,6 +551,6 @@ textarea.field{resize:vertical;min-height:72px}
 </div>
 <div id="layer"></div>
 <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
-<script src="app.js?v=20261110b"></script>
+<script src="app.js?v=20261110d"></script>
 </body>
 </html>

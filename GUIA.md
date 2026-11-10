@@ -59,7 +59,7 @@ La app avisa con **«Renueva el acceso a GitHub»**. Crea un token nuevo con los
 
 ## Diario
 
-En la pestaña **Diario** ves hoy marcado y debajo los días siguientes con lo que tienes anotado. Arriba hay una tira con todos los días del mes: pulsa uno para saltar a él. Con **Anotar** (o el botón de cada día) apuntas una reparación, un móvil que entregar u otra cosa, con el cliente, la hora y el móvil. El círculo lo marca como hecho. Lo que quedó sin hacer de días pasados sale arriba en naranja. El botón **Mes** enseña el mes completo en cuadrícula. Desde una reparación anotada, **Pasar a reparaciones** abre la reparación ya rellenada para apuntar lo cobrado. Todo se guarda cifrado y entra en la copia de seguridad.
+La pestaña **Diario** abre el **calendario del mes** con todos los días a la vez. Cada día se colorea solo: **verde** si está todo hecho, **naranja** si queda algo pendiente o ya pasó la hora sin marcarlo, y **rojo** si el día terminó con algo sin hacer. Toca un día para ver lo anotado al lado (o debajo en el móvil) y toca una anotación para cambiarla. Con **Día a día** lo ves como lista: hoy y los días siguientes. **Anotar** sirve para apuntar una reparación, un móvil que entregar u otra cosa, con cliente y hora; el círculo lo marca como hecho. Desde una reparación anotada, **Pasar a reparaciones** abre la reparación ya rellenada. Todo se guarda cifrado y entra en la copia de seguridad.
 
 ## Límites que conviene saber
 

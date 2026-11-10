@@ -1140,6 +1140,8 @@ function render() {
   v.update(main.firstElementChild, d);
 }
 window.addEventListener('resize', debounce(() => { if (S.ready) render(); }, 200));
+// Cada minuto: los colores del calendario dependen de la hora (hora pasada, día pasado).
+setInterval(() => { if (S.ready && S.tab === 'cal' && !layerStack.length) render(); }, 60000);
 
 /* ---------- DASHBOARD ---------- */
 VIEWS.dash = {
@@ -1607,6 +1609,25 @@ const calTitle = t => { const c = claseOf(t); return t.cliente ? `${CAL_CLASE[c]
 const calSub = t => [t.modelo, t.cliente ? t.tarea : '', claseOf(t) === 'reparacion' && t.tipo && t.tipo !== 'otro' ? tipoOf(t.tipo)[0] : ''].filter(Boolean).filter((v, i, a) => a.indexOf(v) === i).join(' · ');
 const addDays = (iso, n) => { const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; };
 const MONTHS_L = MONTHS.map(m => m.toLowerCase());
+const nowHM = () => { const d = new Date(); return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`; };
+// Estado de una anotación: hecha, «late» (el día ya pasó sin hacerla) u «overdue» (hoy, ya pasó su hora y no tiene check).
+function entryState(t) {
+  if (t.estado === 'hecha') return 'done';
+  const today = todayISO();
+  if (t.fecha < today) return 'late';
+  if (t.fecha === today && t.hora_inicio && (t.hora_fin || t.hora_inicio) <= nowHM()) return 'overdue';
+  return '';
+}
+// Color del día: rojo si quedó algo sin hacer y el día ya pasó, naranja si queda algo pendiente, verde si está todo hecho.
+function dayState(day, list) {
+  if (!list || !list.length) return '';
+  const pend = list.filter(t => t.estado !== 'hecha');
+  if (!pend.length) return 'ok';
+  return day < todayISO() ? 'late' : 'pend';
+}
+const DAY_STATE_TXT = { ok: 'todo hecho', pend: 'quedan cosas pendientes', late: 'se pasó el día con cosas sin hacer' };
+const stateMark = st => st === 'ok' ? `<span class="dmark ok" aria-hidden="true">${ICON.check}</span>` : st === 'late' ? '<span class="dmark late" aria-hidden="true">!</span>' : st === 'pend' ? '<span class="dmark pend" aria-hidden="true"></span>' : '';
+const stateLegend = () => `<div class="st-legend"><span><i class="ok"></i>Todo hecho</span><span><i class="pend"></i>Pendiente u hora pasada sin check</span><span><i class="late"></i>Se pasó el día sin hacer</span></div>`;
 const WEEK = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 const WEEK_L = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 const HM_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -1636,10 +1657,12 @@ function entryHtml(t, { date = false } = {}) {
   const sub = [t.modelo, t.cliente ? t.tarea : ''].filter(Boolean).join(' · ');
   const kind = CAL_CLASE[c][0] + (c === 'reparacion' && t.tipo && t.tipo !== 'otro' ? ' · ' + tipoOf(t.tipo)[0] : '');
   const dur = durMin(t);
-  return `<div class="entry${t.estado === 'hecha' ? ' done' : ''}" data-task="${t.id}" style="--c:${colorOf(t)}" role="button" tabindex="0">
+  const st = entryState(t);
+  const badge = st === 'late' ? '<span class="eb-st late">Sin hacer · el día ya pasó</span>' : st === 'overdue' ? '<span class="eb-st pend">Ya pasó la hora</span>' : '';
+  return `<div class="entry${st ? ' ' + st : ''}" data-task="${t.id}" style="--c:${colorOf(t)}" role="button" tabindex="0">
     <div class="et">${date ? `<small>${esc(fmtDate(t.fecha).slice(0, 5))}</small>` : ''}${t.hora_inicio ? `<b>${esc(t.hora_inicio)}</b>${t.hora_fin ? `<small>${esc(t.hora_fin)}</small>` : ''}` : '<small>Sin hora</small>'}</div>
     <div class="eb"><span class="ek">${ICON[CAL_CLASE[c][1]]}${esc(kind)}${t.estado === 'en_proceso' ? ' · en proceso' : ''}${dur ? ` · ${esc(fmtDur(dur))}` : ''}</span>
-      <h4>${esc(head)}</h4>${sub ? `<p>${esc(sub)}</p>` : ''}${t.notas ? `<p class="nt">${esc(t.notas)}</p>` : ''}</div>
+      <h4>${esc(head)}</h4>${sub ? `<p>${esc(sub)}</p>` : ''}${badge}${t.notas ? `<p class="nt">${esc(t.notas)}</p>` : ''}</div>
     <button type="button" class="tick" data-tick="${t.id}" aria-pressed="${t.estado === 'hecha'}" aria-label="${t.estado === 'hecha' ? 'Marcar como pendiente' : 'Marcar como hecha'}">${ICON.check}</button>
   </div>`;
 }
@@ -1647,17 +1670,19 @@ function entryHtml(t, { date = false } = {}) {
 VIEWS.cal = {
   shell: () => `
     <div class="sec-h"><div><h2 id="cTitle"></h2><p id="cSub"></p></div>
-      <div class="row"><div class="seg-switch big" id="cMode">${[['diario', 'Diario'], ['mes', 'Mes']].map(([k, l]) => `<button type="button" data-mode="${k}">${l}</button>`).join('')}</div>
+      <div class="row"><div class="seg-switch big" id="cMode">${[['mes', 'Calendario'], ['diario', 'Día a día']].map(([k, l]) => `<button type="button" data-mode="${k}">${l}</button>`).join('')}</div>
       <div class="yearbar"><button class="icon-btn" type="button" data-cm="-1" aria-label="Mes anterior">${ICON.left}</button><button class="btn sm" type="button" data-cm="0">Hoy</button><button class="icon-btn" type="button" data-cm="1" aria-label="Mes siguiente">${ICON.right}</button></div>
       <button class="btn primary" type="button" data-addtask>${ICON.plus}Anotar</button></div></div>
     <div id="cDiario" class="diary">
       <div class="strip" id="dStrip" role="group" aria-label="Días del mes"></div>
+      ${stateLegend()}
       <div id="dLate"></div>
       <div class="dlist" id="dList"></div>
     </div>
     <div id="cMes" class="view" style="animation:none">
       <section class="kpis" id="cK"></section>
       <div class="chips" id="cTipos" role="group" aria-label="Filtrar por tipo"></div>
+      ${stateLegend()}
       <div class="cal-layout">
         <section class="panel cal"><div class="cal-wk" aria-hidden="true">${WEEK.map(w => `<span>${w}</span>`).join('')}</div><div class="cal-g" id="cGrid"></div></section>
         <section class="panel day-p" id="cDay" aria-live="polite"></section>
@@ -1667,7 +1692,7 @@ VIEWS.cal = {
     const F = S.calF;
     root.addEventListener('click', async e => {
       const md = e.target.closest('[data-mode]');
-      if (md) { F.mode = md.dataset.mode; try { localStorage.setItem('almantec-cn-calmode', F.mode); } catch { /* nada */ } render(); return; }
+      if (md) { F.mode = md.dataset.mode; try { localStorage.setItem('almantec-cn-calmode2', F.mode); } catch { /* nada */ } render(); return; }
       const mv = e.target.closest('[data-cm]');
       if (mv) {
         const n = +mv.dataset.cm;
@@ -1695,12 +1720,12 @@ VIEWS.cal = {
   },
   update(root) {
     const F = S.calF;
-    if (!F.mode) { try { F.mode = localStorage.getItem('almantec-cn-calmode') || 'diario'; } catch { F.mode = 'diario'; } }
+    if (!F.mode) { try { F.mode = localStorage.getItem('almantec-cn-calmode2') || 'mes'; } catch { F.mode = 'mes'; } }
     const diary = F.mode !== 'mes';
     $$('#cMode [data-mode]', root).forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === F.mode));
     $('#cDiario', root).hidden = !diary; $('#cMes', root).hidden = diary;
     $('#cTitle', root).textContent = monthName(F.month);
-    $('#cSub', root).textContent = diary ? 'Tu diario: reparaciones que hacer, móviles que entregar y todo lo que tengas que recordar.' : 'Vista del mes completo, con las horas y el tipo de cada reparación.';
+    $('#cSub', root).textContent = diary ? 'Día a día: hoy y los días siguientes con lo que tienes anotado.' : 'Todo el mes de un vistazo. Toca un día para ver lo anotado, o una anotación para cambiarla.';
     diary ? this.diary(root, F) : this.month(root, F);
   },
   diary(root, F) {
@@ -1714,14 +1739,15 @@ VIEWS.cal = {
     $('#dStrip', root).innerHTML = days.map(d => {
       const list = byDay.get(d) || [];
       const wd = new Date(d + 'T12:00:00').getDay();
-      const cls = ['sd', d === today && 'today', d === F.day && 'sel', d < today && 'past'].filter(Boolean).join(' ');
-      return `<button type="button" class="${cls}" data-pick="${d}" aria-pressed="${d === F.day}" aria-label="${esc(dayLong(d))}: ${list.length ? list.length + ' anotaci' + (list.length === 1 ? 'ón' : 'ones') : 'libre'}">
+      const st = dayState(d, list);
+      const cls = ['sd', d === today && 'today', d === F.day && 'sel', d < today && 'past', st && 'st-' + st].filter(Boolean).join(' ');
+      return `<button type="button" class="${cls}" data-pick="${d}" aria-pressed="${d === F.day}" aria-label="${esc(dayLong(d))}: ${list.length ? list.length + ' anotaci' + (list.length === 1 ? 'ón' : 'ones') + ', ' + DAY_STATE_TXT[st] : 'libre'}">
         <small>${WEEK[(wd + 6) % 7]}</small><b>${+d.slice(8)}</b><span class="sdots">${list.slice(0, 3).map(t => `<i style="--c:${colorOf(t)}"${t.estado === 'hecha' ? ' class="done"' : ''}></i>`).join('')}</span></button>`;
     }).join('');
     requestAnimationFrame(() => { const s = $('#dStrip', root), b = $('#dStrip .sel', root); if (s && b) s.scrollTo({ left: b.offsetLeft - s.clientWidth / 2 + b.clientWidth / 2, behavior: 'smooth' }); });
     // Lo que quedó sin hacer de días anteriores.
     const late = S.cal.filter(t => t.fecha < today && t.estado !== 'hecha');
-    $('#dLate', root).innerHTML = late.length ? `<details class="late"><summary>${ICON.clock}<span><b>${late.length}</b> sin hacer de días anteriores</span></summary><div class="entries">${late.map(t => entryHtml(t, { date: true })).join('')}</div></details>` : '';
+    $('#dLate', root).innerHTML = late.length ? `<details class="late-box"><summary>${ICON.clock}<span><b>${late.length}</b> sin hacer de días anteriores</span></summary><div class="entries">${late.map(t => entryHtml(t, { date: true })).join('')}</div></details>` : '';
     // El día elegido y los siguientes: hasta fin de mes, y al menos una semana.
     let end = days.at(-1);
     if (addDays(F.day, 6) > end) end = addDays(F.day, 6);
@@ -1732,8 +1758,9 @@ VIEWS.cal = {
       const dd = new Date(d + 'T12:00:00');
       const rel = d === today ? 'Hoy' : d === addDays(today, 1) ? 'Mañana' : d === addDays(today, -1) ? 'Ayer' : '';
       const pend = items.filter(t => t.estado !== 'hecha').length;
-      return `<article class="dday${d === today ? ' is-today' : ''}${d === F.day ? ' is-sel' : ''}${d < today ? ' is-past' : ''}" id="dd-${d}">
-        <header><div class="dd-date"><b>${dd.getDate()}</b><span>${rel ? `<em>${rel}</em>` : ''}${WEEK_L[dd.getDay()].toLowerCase()}<small>${MONTHS_L[dd.getMonth()]}${items.length ? ` · ${items.length} anotaci${items.length === 1 ? 'ón' : 'ones'}${pend && pend < items.length ? `, ${pend} sin hacer` : ''}` : ''}</small></span></div>
+      const st = dayState(d, items);
+      return `<article class="dday${d === today ? ' is-today' : ''}${d === F.day ? ' is-sel' : ''}${d < today ? ' is-past' : ''}${st ? ' st-' + st : ''}" id="dd-${d}">
+        <header><div class="dd-date"><b>${dd.getDate()}</b>${stateMark(st)}<span>${rel ? `<em>${rel}</em>` : ''}${WEEK_L[dd.getDay()].toLowerCase()}<small>${MONTHS_L[dd.getMonth()]}${items.length ? ` · ${items.length} anotaci${items.length === 1 ? 'ón' : 'ones'}${pend && pend < items.length ? `, ${pend} sin hacer` : ''}` : ''}</small></span></div>
           <button class="btn sm" type="button" data-addtask data-date="${d}">${ICON.plus}Anotar</button></header>
         ${items.length ? `<div class="entries">${items.map(t => entryHtml(t)).join('')}</div>` : `<button type="button" class="dd-free" data-addtask data-date="${d}">Libre · toca para anotar algo</button>`}
       </article>`;
@@ -1757,21 +1784,23 @@ VIEWS.cal = {
     $('#cTipos', root).innerHTML = chipsHtml('tipo', Object.entries(CAL_TIPOS).map(([k, [l, c]]) => [k, l, count(k), c]), F.tipo);
     $$('#cTipos .chip', root).forEach(b => { if (!count(b.dataset.v) && F.tipo !== b.dataset.v) b.classList.add('dim'); });
 
-    const byDay = new Map();
+    const byDay = new Map(), allDay = new Map();
     for (const t of tasks) { if (!byDay.has(t.fecha)) byDay.set(t.fecha, []); byDay.get(t.fecha).push(t); }
+    for (const t of S.cal) { if (!allDay.has(t.fecha)) allDay.set(t.fecha, []); allDay.get(t.fecha).push(t); }
     const repDay = new Map();
     for (const r of S.rep) repDay.set(r.fecha, (repDay.get(r.fecha) || 0) + 1);
     $('#cGrid', root).innerHTML = calDays(F.month).map(day => {
       const list = byDay.get(day) || [];
       const dmin = list.reduce((a, t) => a + durMin(t), 0);
       const wd = new Date(day + 'T12:00:00').getDay();
-      const cls = ['cal-d', day.slice(0, 7) !== F.month && 'out', day === today && 'today', day === F.day && 'sel', (wd === 0 || wd === 6) && 'we', list.length && 'has'].filter(Boolean).join(' ');
+      const st = dayState(day, allDay.get(day));
+      const cls = ['cal-d', day.slice(0, 7) !== F.month && 'out', day === today && 'today', day === F.day && 'sel', (wd === 0 || wd === 6) && 'we', list.length && 'has', st && 'st-' + st].filter(Boolean).join(' ');
       const nRep = repDay.get(day) || 0;
       const pend = list.filter(t => t.estado !== 'hecha').length;
-      const label = `${dayLong(day)}: ${list.length ? list.length + ' anotaci' + (list.length === 1 ? 'ón' : 'ones') + (pend ? `, ${pend} sin hacer` : '') : 'libre'}${nRep ? `, ${nRep} reparaci${nRep === 1 ? 'ón' : 'ones'} registrada${nRep === 1 ? '' : 's'}` : ''}`;
+      const label = `${dayLong(day)}: ${list.length ? list.length + ' anotaci' + (list.length === 1 ? 'ón' : 'ones') + (pend ? `, ${pend} sin hacer` : '') + ', ' + DAY_STATE_TXT[st] : 'libre'}${nRep ? `, ${nRep} reparaci${nRep === 1 ? 'ón' : 'ones'} registrada${nRep === 1 ? '' : 's'}` : ''}`;
       return `<button type="button" class="${cls}" data-day="${day}" aria-pressed="${day === F.day}" aria-label="${esc(label)}">
-        <span class="dn"><b>${+day.slice(8)}</b>${nRep ? `<span class="rc" title="Reparaciones registradas este día">${ICON.wrench}<span>${nRep}</span></span>` : ''}</span>
-        ${list.slice(0, 3).map(t => `<span class="ev${t.estado === 'hecha' ? ' done' : ''}" style="--c:${colorOf(t)}">${t.hora_inicio ? `<b>${esc(t.hora_inicio)}</b>` : ''}${esc(t.cliente || t.modelo || t.tarea || CAL_CLASE[claseOf(t)][0])}</span>`).join('')}
+        <span class="dn"><b>${+day.slice(8)}</b>${stateMark(st)}${nRep ? `<span class="rc" title="Reparaciones registradas este día">${ICON.wrench}<span>${nRep}</span></span>` : ''}</span>
+        ${list.slice(0, 3).map(t => `<span class="ev ${entryState(t)}" data-task="${t.id}" style="--c:${colorOf(t)}" title="Toca para cambiarla">${t.hora_inicio ? `<b>${esc(t.hora_inicio)}</b>` : ''}${esc(t.cliente || t.modelo || t.tarea || CAL_CLASE[claseOf(t)][0])}</span>`).join('')}
         ${list.length > 3 ? `<span class="ev-more">+${list.length - 3} más</span>` : ''}
         ${list.length ? `<span class="dots">${list.slice(0, 6).map(t => `<i style="--c:${colorOf(t)}"${t.estado === 'hecha' ? ' class="done"' : ''}></i>`).join('')}</span>` : ''}
         ${dmin ? `<span class="load" title="${esc(fmtDur(dmin))} planificadas"><i style="width:${Math.min(100, dmin / 480 * 100)}%"></i></span>` : ''}
