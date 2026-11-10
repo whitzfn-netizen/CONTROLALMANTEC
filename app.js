@@ -67,6 +67,7 @@ const ICON = {
   right: '<svg class="i s" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg>',
   lock: '<svg class="i" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
   cal: '<svg class="i" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>',
+  note: '<svg class="i" viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13h7M9 17h5"/></svg>',
   plus: '<svg class="i s" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
   cloudOff: '<svg class="i" viewBox="0 0 24 24"><path d="M3 3l18 18M8 7a6 6 0 0 1 9.7 3.1A4.5 4.5 0 0 1 20 18.5M17 19H7a5 5 0 0 1-1.6-9.7"/></svg>',
 };
@@ -539,7 +540,7 @@ const Sync = {
 
 /* ---------- Registros: de los datos sincronizados a las listas de la app ---------- */
 const REP_COLS = ['fecha', 'cliente', 'telefono', 'modelo', 'descripcion', 'facturado', 'coste_pieza', 'otros_costes', 'estado', 'estado_pago', 'fecha_pago', 'notas'];
-const CAL_COLS = ['fecha', 'hora_inicio', 'hora_fin', 'tipo', 'tarea', 'modelo', 'cliente', 'telefono', 'estado', 'notas'];
+const CAL_COLS = ['fecha', 'hora_inicio', 'hora_fin', 'clase', 'tipo', 'tarea', 'modelo', 'cliente', 'telefono', 'estado', 'notas'];
 const MOV_COLS = ['fecha_compra', 'fecha_venta', 'marca', 'modelo', 'imei', 'precio_compra', 'costes_adicionales', 'precio_venta', 'estado', 'fecha_cobro', 'notas'];
 const listOf = kind => kind;
 const money2 = c => Math.round(c) / 100;
@@ -595,7 +596,7 @@ function openStatus() {
       <dl class="kv"><dt>Repositorio</dt><dd>${esc(Sync.cfg.owner)}/${esc(Sync.cfg.repo)} · rama ${esc(Sync.cfg.branch)}</dd>
         <dt>Último guardado desde aquí</dt><dd>${Sync.lastSave ? esc(fmtDateTime(Sync.lastSave.toISOString())) : '—'}</dd>
         <dt>Última comprobación</dt><dd>${Sync.lastPull ? esc(fmtDateTime(Sync.lastPull.toISOString())) : '—'}</dd>
-        <dt>Registros</dt><dd>${S.rep.length} reparaciones · ${S.mov.length} móviles · ${S.cal.length} tareas del calendario</dd></dl>
+        <dt>Registros</dt><dd>${S.rep.length} reparaciones · ${S.mov.length} móviles · ${S.cal.length} anotaciones del diario</dd></dl>
       <p class="muted" style="margin:0;font-size:12.5px">Los cambios de otros dispositivos aparecen solos en unos 15 segundos con la página abierta.</p>
     </div>
     <div class="modal-f"><button class="btn ghost" type="button" data-c="key">Cambiar la clave</button><button class="btn ghost" type="button" data-c="out">Desconectar este dispositivo</button><button class="btn primary" type="button" data-close>Listo</button></div>`, { cls: 'narrow' });
@@ -661,12 +662,12 @@ async function askDelete(kind, id) {
   const rec = S[listOf(kind)].find(r => r.id === id);
   if (!rec) return;
   const what = kind === 'cal'
-    ? `la tarea <b>${esc(rec.tarea)}</b> del ${esc(fmtDate(rec.fecha))}${rec.hora_inicio ? ' a las ' + esc(rec.hora_inicio) : ''}`
+    ? `<b>${esc(calTitle(rec))}</b> del ${esc(fmtDate(rec.fecha))}${rec.hora_inicio ? ' a las ' + esc(rec.hora_inicio) : ''}`
     : kind === 'rep'
     ? `la reparación de <b>${esc(rec.cliente)}</b> (${esc(rec.modelo)}, ${esc(fmtDate(rec.fecha))}, ${esc(eurN(rec.facturado))})`
     : `el móvil <b>${esc(rec.marca)} ${esc(rec.modelo)}</b> comprado el ${esc(fmtDate(rec.fecha_compra))}`;
   const ok = await confirmBox({
-    title: kind === 'cal' ? 'Eliminar tarea' : kind === 'rep' ? 'Eliminar reparación' : 'Eliminar móvil',
+    title: kind === 'cal' ? 'Eliminar anotación' : kind === 'rep' ? 'Eliminar reparación' : 'Eliminar móvil',
     body: `<p style="margin:0">Vas a eliminar ${what}. Se borra para todos los dispositivos${kind === 'cal' ? '' : ' y las estadísticas se recalculan'}.</p><div class="alert o">${ICON.info}<p>No se puede deshacer. Si dudas, descarga antes una copia de seguridad (menú Datos).</p></div>`,
     ok: 'Eliminar', danger: true,
   });
@@ -1125,7 +1126,7 @@ function render() {
   const pendRep = S.rep.filter(r => r.estado !== 'finalizada').length;
   const tr = $('#tabRepN'); tr.hidden = !pendRep; tr.textContent = pendRep; tr.title = 'Reparaciones sin finalizar';
   const hoy = S.cal.filter(t => t.fecha === todayISO() && t.estado !== 'hecha').length;
-  const tc = $('#tabCalN'); tc.hidden = !hoy; tc.textContent = hoy; tc.title = 'Tareas de hoy sin hacer';
+  const tc = $('#tabCalN'); tc.hidden = !hoy; tc.textContent = hoy; tc.title = 'Anotaciones de hoy sin hacer';
   const avail = d.inv.disponibles + d.inv.reservados;
   const tm = $('#tabMovN'); tm.hidden = !avail; tm.textContent = avail; tm.title = 'Móviles sin vender';
   tm.style.background = 'var(--blue-bg)'; tm.style.color = 'var(--blue)';
@@ -1597,6 +1598,15 @@ const CAL_TIPOS = {
   trasera: ['Tapa / cristal trasero', '#d55181'], placa: ['Placa / mojado', '#008300'], software: ['Software / desbloqueo', '#9085e9'], otro: ['Otro', '#848d98'],
 };
 const CAL_ESTADO = { pendiente: ['Pendiente', 't-o'], en_proceso: ['En proceso', 't-b'], hecha: ['Hecha', 't-g'] };
+// Qué es la anotación. Las antiguas no tienen clase: son reparaciones.
+const CAL_CLASE = { reparacion: ['Reparación', 'wrench'], entrega: ['Entregar móvil', 'phone'], otro: ['Otra cosa', 'note'] };
+const claseOf = t => CAL_CLASE[t.clase] ? t.clase : 'reparacion';
+const colorOf = t => claseOf(t) === 'reparacion' ? tipoOf(t.tipo)[1] : claseOf(t) === 'entrega' ? '#e9ebee' : '#848d98';
+// «Reparación · Guillermo», o lo que haya escrito si no hay cliente.
+const calTitle = t => { const c = claseOf(t); return t.cliente ? `${CAL_CLASE[c][0]} · ${t.cliente}` : (t.tarea || CAL_CLASE[c][0]); };
+const calSub = t => [t.modelo, t.cliente ? t.tarea : '', claseOf(t) === 'reparacion' && t.tipo && t.tipo !== 'otro' ? tipoOf(t.tipo)[0] : ''].filter(Boolean).filter((v, i, a) => a.indexOf(v) === i).join(' · ');
+const addDays = (iso, n) => { const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; };
+const MONTHS_L = MONTHS.map(m => m.toLowerCase());
 const WEEK = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 const WEEK_L = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 const HM_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -1619,20 +1629,45 @@ function calDays(month) {
   return out;
 }
 
+// Tarjeta de una anotación (se usa en el diario y en el panel del día).
+function entryHtml(t, { date = false } = {}) {
+  const c = claseOf(t);
+  const head = t.cliente || t.tarea || CAL_CLASE[c][0];
+  const sub = [t.modelo, t.cliente ? t.tarea : ''].filter(Boolean).join(' · ');
+  const kind = CAL_CLASE[c][0] + (c === 'reparacion' && t.tipo && t.tipo !== 'otro' ? ' · ' + tipoOf(t.tipo)[0] : '');
+  const dur = durMin(t);
+  return `<div class="entry${t.estado === 'hecha' ? ' done' : ''}" data-task="${t.id}" style="--c:${colorOf(t)}" role="button" tabindex="0">
+    <div class="et">${date ? `<small>${esc(fmtDate(t.fecha).slice(0, 5))}</small>` : ''}${t.hora_inicio ? `<b>${esc(t.hora_inicio)}</b>${t.hora_fin ? `<small>${esc(t.hora_fin)}</small>` : ''}` : '<small>Sin hora</small>'}</div>
+    <div class="eb"><span class="ek">${ICON[CAL_CLASE[c][1]]}${esc(kind)}${t.estado === 'en_proceso' ? ' · en proceso' : ''}${dur ? ` · ${esc(fmtDur(dur))}` : ''}</span>
+      <h4>${esc(head)}</h4>${sub ? `<p>${esc(sub)}</p>` : ''}${t.notas ? `<p class="nt">${esc(t.notas)}</p>` : ''}</div>
+    <button type="button" class="tick" data-tick="${t.id}" aria-pressed="${t.estado === 'hecha'}" aria-label="${t.estado === 'hecha' ? 'Marcar como pendiente' : 'Marcar como hecha'}">${ICON.check}</button>
+  </div>`;
+}
+
 VIEWS.cal = {
   shell: () => `
-    <div class="sec-h"><div><h2 id="cTitle"></h2><p>Planifica las reparaciones del mes: qué hay que hacer, a qué hora y de qué tipo.</p></div>
-      <div class="row"><div class="yearbar"><button class="icon-btn" type="button" data-cm="-1" aria-label="Mes anterior">${ICON.left}</button><button class="btn sm" type="button" data-cm="0">Hoy</button><button class="icon-btn" type="button" data-cm="1" aria-label="Mes siguiente">${ICON.right}</button></div>
-      <button class="btn primary" type="button" data-addtask>${ICON.cal}Nueva tarea</button></div></div>
-    <section class="kpis" id="cK"></section>
-    <div class="chips" id="cTipos" role="group" aria-label="Filtrar por tipo"></div>
-    <div class="cal-layout">
-      <section class="panel cal"><div class="cal-wk" aria-hidden="true">${WEEK.map(w => `<span>${w}</span>`).join('')}</div><div class="cal-g" id="cGrid"></div></section>
-      <section class="panel day-p" id="cDay" aria-live="polite"></section>
+    <div class="sec-h"><div><h2 id="cTitle"></h2><p id="cSub"></p></div>
+      <div class="row"><div class="seg-switch big" id="cMode">${[['diario', 'Diario'], ['mes', 'Mes']].map(([k, l]) => `<button type="button" data-mode="${k}">${l}</button>`).join('')}</div>
+      <div class="yearbar"><button class="icon-btn" type="button" data-cm="-1" aria-label="Mes anterior">${ICON.left}</button><button class="btn sm" type="button" data-cm="0">Hoy</button><button class="icon-btn" type="button" data-cm="1" aria-label="Mes siguiente">${ICON.right}</button></div>
+      <button class="btn primary" type="button" data-addtask>${ICON.plus}Anotar</button></div></div>
+    <div id="cDiario" class="diary">
+      <div class="strip" id="dStrip" role="group" aria-label="Días del mes"></div>
+      <div id="dLate"></div>
+      <div class="dlist" id="dList"></div>
+    </div>
+    <div id="cMes" class="view" style="animation:none">
+      <section class="kpis" id="cK"></section>
+      <div class="chips" id="cTipos" role="group" aria-label="Filtrar por tipo"></div>
+      <div class="cal-layout">
+        <section class="panel cal"><div class="cal-wk" aria-hidden="true">${WEEK.map(w => `<span>${w}</span>`).join('')}</div><div class="cal-g" id="cGrid"></div></section>
+        <section class="panel day-p" id="cDay" aria-live="polite"></section>
+      </div>
     </div>`,
   bind(root) {
     const F = S.calF;
     root.addEventListener('click', async e => {
+      const md = e.target.closest('[data-mode]');
+      if (md) { F.mode = md.dataset.mode; try { localStorage.setItem('almantec-cn-calmode', F.mode); } catch { /* nada */ } render(); return; }
       const mv = e.target.closest('[data-cm]');
       if (mv) {
         const n = +mv.dataset.cm;
@@ -1640,11 +1675,13 @@ VIEWS.cal = {
         render(); return;
       }
       const ch = e.target.closest('[data-chip="tipo"]'); if (ch) { F.tipo = F.tipo === ch.dataset.v ? '' : ch.dataset.v; render(); return; }
-      if (e.target.closest('[data-addtask]')) { openCalForm(null, { fecha: F.day }); return; }
+      const add = e.target.closest('[data-addtask]'); if (add) { openCalForm(null, { fecha: add.dataset.date || F.day }); return; }
       const tk = e.target.closest('[data-tick]');
       if (tk) { e.stopPropagation(); toggleTask(tk.dataset.tick); return; }
       const t = e.target.closest('[data-task]'); if (t) { openRecord('cal', t.dataset.task); return; }
       const r = e.target.closest('[data-rep]'); if (r) { openRecord('rep', r.dataset.rep); return; }
+      const pk = e.target.closest('[data-pick]');
+      if (pk) { F.day = pk.dataset.pick; render(); $('#dList', root).scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
       const d = e.target.closest('[data-day]');
       if (d) {
         F.day = d.dataset.day;
@@ -1653,23 +1690,70 @@ VIEWS.cal = {
         if (matchMedia('(max-width:1100px)').matches) $('#cDay', root).scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
     });
+    root.addEventListener('keydown', e => { const t = e.target.closest?.('[data-task]'); if (t && e.target === t && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openRecord('cal', t.dataset.task); } });
     root.addEventListener('dblclick', e => { const d = e.target.closest('[data-day]'); if (d) openCalForm(null, { fecha: d.dataset.day }); });
   },
   update(root) {
     const F = S.calF;
-    const today = todayISO();
+    if (!F.mode) { try { F.mode = localStorage.getItem('almantec-cn-calmode') || 'diario'; } catch { F.mode = 'diario'; } }
+    const diary = F.mode !== 'mes';
+    $$('#cMode [data-mode]', root).forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === F.mode));
+    $('#cDiario', root).hidden = !diary; $('#cMes', root).hidden = diary;
     $('#cTitle', root).textContent = monthName(F.month);
+    $('#cSub', root).textContent = diary ? 'Tu diario: reparaciones que hacer, móviles que entregar y todo lo que tengas que recordar.' : 'Vista del mes completo, con las horas y el tipo de cada reparación.';
+    diary ? this.diary(root, F) : this.month(root, F);
+  },
+  diary(root, F) {
+    const today = todayISO();
+    const byDay = new Map();
+    for (const t of S.cal) { if (!byDay.has(t.fecha)) byDay.set(t.fecha, []); byDay.get(t.fecha).push(t); }
+    // Tira con todos los días del mes.
+    const [y, m] = F.month.split('-').map(Number);
+    const nDays = new Date(y, m, 0).getDate();
+    const days = Array.from({ length: nDays }, (_, i) => `${F.month}-${pad2(i + 1)}`);
+    $('#dStrip', root).innerHTML = days.map(d => {
+      const list = byDay.get(d) || [];
+      const wd = new Date(d + 'T12:00:00').getDay();
+      const cls = ['sd', d === today && 'today', d === F.day && 'sel', d < today && 'past'].filter(Boolean).join(' ');
+      return `<button type="button" class="${cls}" data-pick="${d}" aria-pressed="${d === F.day}" aria-label="${esc(dayLong(d))}: ${list.length ? list.length + ' anotaci' + (list.length === 1 ? 'ón' : 'ones') : 'libre'}">
+        <small>${WEEK[(wd + 6) % 7]}</small><b>${+d.slice(8)}</b><span class="sdots">${list.slice(0, 3).map(t => `<i style="--c:${colorOf(t)}"${t.estado === 'hecha' ? ' class="done"' : ''}></i>`).join('')}</span></button>`;
+    }).join('');
+    requestAnimationFrame(() => { const s = $('#dStrip', root), b = $('#dStrip .sel', root); if (s && b) s.scrollTo({ left: b.offsetLeft - s.clientWidth / 2 + b.clientWidth / 2, behavior: 'smooth' }); });
+    // Lo que quedó sin hacer de días anteriores.
+    const late = S.cal.filter(t => t.fecha < today && t.estado !== 'hecha');
+    $('#dLate', root).innerHTML = late.length ? `<details class="late"><summary>${ICON.clock}<span><b>${late.length}</b> sin hacer de días anteriores</span></summary><div class="entries">${late.map(t => entryHtml(t, { date: true })).join('')}</div></details>` : '';
+    // El día elegido y los siguientes: hasta fin de mes, y al menos una semana.
+    let end = days.at(-1);
+    if (addDays(F.day, 6) > end) end = addDays(F.day, 6);
+    const list = [];
+    for (let d = F.day; d <= end; d = addDays(d, 1)) list.push(d);
+    $('#dList', root).innerHTML = list.map(d => {
+      const items = byDay.get(d) || [];
+      const dd = new Date(d + 'T12:00:00');
+      const rel = d === today ? 'Hoy' : d === addDays(today, 1) ? 'Mañana' : d === addDays(today, -1) ? 'Ayer' : '';
+      const pend = items.filter(t => t.estado !== 'hecha').length;
+      return `<article class="dday${d === today ? ' is-today' : ''}${d === F.day ? ' is-sel' : ''}${d < today ? ' is-past' : ''}" id="dd-${d}">
+        <header><div class="dd-date"><b>${dd.getDate()}</b><span>${rel ? `<em>${rel}</em>` : ''}${WEEK_L[dd.getDay()].toLowerCase()}<small>${MONTHS_L[dd.getMonth()]}${items.length ? ` · ${items.length} anotaci${items.length === 1 ? 'ón' : 'ones'}${pend && pend < items.length ? `, ${pend} sin hacer` : ''}` : ''}</small></span></div>
+          <button class="btn sm" type="button" data-addtask data-date="${d}">${ICON.plus}Anotar</button></header>
+        ${items.length ? `<div class="entries">${items.map(t => entryHtml(t)).join('')}</div>` : `<button type="button" class="dd-free" data-addtask data-date="${d}">Libre · toca para anotar algo</button>`}
+      </article>`;
+    }).join('') + `<button type="button" class="btn ghost more-days" data-pick="${addDays(end, 1)}">Ver los días siguientes ${ICON.right}</button>`;
+  },
+  month(root, F) {
+    const today = todayISO();
     const all = S.cal.filter(t => t.fecha.startsWith(F.month));
-    const tasks = F.tipo ? all.filter(t => t.tipo === F.tipo) : all;
+    const tasks = F.tipo ? all.filter(t => claseOf(t) === 'reparacion' && t.tipo === F.tipo) : all;
     const done = tasks.filter(t => t.estado === 'hecha').length;
     const mins = tasks.reduce((a, t) => a + durMin(t), 0);
     const late = tasks.filter(t => t.estado !== 'hecha' && t.fecha < today).length;
+    const entregas = all.filter(t => claseOf(t) === 'entrega').length;
     $('#cK', root).innerHTML =
-      kpi({ label: 'Tareas del mes', value: String(tasks.length), icon: ICON.cal, tone: 'b', sub: F.tipo ? esc(tipoOf(F.tipo)[0]) : 'Todos los tipos' })
+      kpi({ label: 'Anotaciones del mes', value: String(tasks.length), icon: ICON.cal, tone: 'b', sub: F.tipo ? esc(tipoOf(F.tipo)[0]) : `${entregas} entrega${entregas === 1 ? '' : 's'} de móvil` })
       + kpi({ label: 'Pendientes', value: String(tasks.length - done), icon: ICON.clock, tone: 'o', sub: late ? `<span class="c-r">${late} de días pasados</span>` : 'Ninguna atrasada' })
-      + kpi({ label: 'Horas planificadas', value: esc(fmtDur(mins) || '0 h'), icon: ICON.wrench, tone: 'v', sub: 'Suma de las tareas con hora de fin' })
+      + kpi({ label: 'Horas planificadas', value: esc(fmtDur(mins) || '0 h'), icon: ICON.wrench, tone: 'v', sub: 'Suma de las que tienen hora de fin' })
       + kpi({ label: 'Hechas', value: tasks.length ? Math.round(done / tasks.length * 100) + ' %' : '—', icon: ICON.check, tone: 'g', sub: `<span class="prog"><i style="width:${tasks.length ? done / tasks.length * 100 : 0}%"></i></span>` });
-    const count = k => all.filter(t => t.tipo === k).length;
+    const reps = all.filter(t => claseOf(t) === 'reparacion');
+    const count = k => reps.filter(t => t.tipo === k).length;
     $('#cTipos', root).innerHTML = chipsHtml('tipo', Object.entries(CAL_TIPOS).map(([k, [l, c]]) => [k, l, count(k), c]), F.tipo);
     $$('#cTipos .chip', root).forEach(b => { if (!count(b.dataset.v) && F.tipo !== b.dataset.v) b.classList.add('dim'); });
 
@@ -1684,36 +1768,25 @@ VIEWS.cal = {
       const cls = ['cal-d', day.slice(0, 7) !== F.month && 'out', day === today && 'today', day === F.day && 'sel', (wd === 0 || wd === 6) && 'we', list.length && 'has'].filter(Boolean).join(' ');
       const nRep = repDay.get(day) || 0;
       const pend = list.filter(t => t.estado !== 'hecha').length;
-      const label = `${dayLong(day)}: ${list.length ? list.length + ' tarea' + (list.length === 1 ? '' : 's') + (pend ? `, ${pend} sin hacer` : '') : 'sin tareas'}${nRep ? `, ${nRep} reparaci${nRep === 1 ? 'ón' : 'ones'} registrada${nRep === 1 ? '' : 's'}` : ''}`;
+      const label = `${dayLong(day)}: ${list.length ? list.length + ' anotaci' + (list.length === 1 ? 'ón' : 'ones') + (pend ? `, ${pend} sin hacer` : '') : 'libre'}${nRep ? `, ${nRep} reparaci${nRep === 1 ? 'ón' : 'ones'} registrada${nRep === 1 ? '' : 's'}` : ''}`;
       return `<button type="button" class="${cls}" data-day="${day}" aria-pressed="${day === F.day}" aria-label="${esc(label)}">
         <span class="dn"><b>${+day.slice(8)}</b>${nRep ? `<span class="rc" title="Reparaciones registradas este día">${ICON.wrench}<span>${nRep}</span></span>` : ''}</span>
-        ${list.slice(0, 3).map(t => `<span class="ev${t.estado === 'hecha' ? ' done' : ''}" style="--c:${tipoOf(t.tipo)[1]}">${t.hora_inicio ? `<b>${esc(t.hora_inicio)}</b>` : ''}${esc(t.modelo || tipoOf(t.tipo)[0])}</span>`).join('')}
+        ${list.slice(0, 3).map(t => `<span class="ev${t.estado === 'hecha' ? ' done' : ''}" style="--c:${colorOf(t)}">${t.hora_inicio ? `<b>${esc(t.hora_inicio)}</b>` : ''}${esc(t.cliente || t.modelo || t.tarea || CAL_CLASE[claseOf(t)][0])}</span>`).join('')}
         ${list.length > 3 ? `<span class="ev-more">+${list.length - 3} más</span>` : ''}
-        ${list.length ? `<span class="dots">${list.slice(0, 6).map(t => `<i style="--c:${tipoOf(t.tipo)[1]}"${t.estado === 'hecha' ? ' class="done"' : ''}></i>`).join('')}</span>` : ''}
+        ${list.length ? `<span class="dots">${list.slice(0, 6).map(t => `<i style="--c:${colorOf(t)}"${t.estado === 'hecha' ? ' class="done"' : ''}></i>`).join('')}</span>` : ''}
         ${dmin ? `<span class="load" title="${esc(fmtDur(dmin))} planificadas"><i style="width:${Math.min(100, dmin / 480 * 100)}%"></i></span>` : ''}
       </button>`;
     }).join('');
 
-    const dayTasks = (byDay.get(F.day) || []);
+    const dayTasks = byDay.get(F.day) || [];
     const dmin = dayTasks.reduce((a, t) => a + durMin(t), 0);
-    const reps = S.rep.filter(r => r.fecha === F.day);
+    const dreps = S.rep.filter(r => r.fecha === F.day);
     $('#cDay', root).innerHTML = `
       <div class="day-h"><div><h3>${esc(dayLong(F.day))}${F.day === today ? ' <span class="pill t-g">Hoy</span>' : ''}</h3>
-        <p>${dayTasks.length ? `${dayTasks.length} tarea${dayTasks.length === 1 ? '' : 's'}${dmin ? ' · ' + esc(fmtDur(dmin)) : ''}` : 'Nada planificado'}${F.tipo ? ' · solo ' + esc(tipoOf(F.tipo)[0].toLowerCase()) : ''}</p></div>
-        <button class="btn sm" type="button" data-addtask>${ICON.plus}Añadir</button></div>
-      <div class="tasks">${dayTasks.length ? dayTasks.map(t => {
-        const [tl, tc] = tipoOf(t.tipo);
-        return `<div class="task${t.estado === 'hecha' ? ' done' : ''}" data-task="${t.id}" style="--c:${tc}" role="button" tabindex="0">
-          <span class="bar"></span>
-          <div class="tb"><span class="tm">${esc(timeRange(t))}${durMin(t) ? ` · ${esc(fmtDur(durMin(t)))}` : ''}</span>
-            <h4>${esc(t.tarea)}</h4>
-            <div class="meta"><span class="tp"><i></i>${esc(tl)}</span>${t.modelo ? `<span>${esc(t.modelo)}</span>` : ''}${t.cliente ? `<span>${esc(t.cliente)}</span>` : ''}${t.estado === 'en_proceso' ? pill(CAL_ESTADO, 'en_proceso') : ''}</div>
-            ${t.notas ? `<p class="nt">${esc(t.notas)}</p>` : ''}</div>
-          <button type="button" class="tick" data-tick="${t.id}" aria-pressed="${t.estado === 'hecha'}" aria-label="${t.estado === 'hecha' ? 'Marcar como pendiente' : 'Marcar como hecha'}">${ICON.check}</button>
-        </div>`;
-      }).join('') : `<div class="day-empty">${ICON.cal}<p>Pulsa <b>Añadir</b> para planificar una reparación este día.</p></div>`}</div>
-      ${reps.length ? `<div class="day-reps"><h5>Reparaciones registradas este día</h5>${reps.map(r => `<button type="button" class="rep-l" data-rep="${r.id}"><span>${esc(r.modelo)} · ${esc(r.cliente)}</span>${pill(REP_ESTADO, r.estado)}</button>`).join('')}</div>` : ''}`;
-    $$('#cDay .task', root).forEach(el => el.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target === el) { e.preventDefault(); openRecord('cal', el.dataset.task); } }));
+        <p>${dayTasks.length ? `${dayTasks.length} anotaci${dayTasks.length === 1 ? 'ón' : 'ones'}${dmin ? ' · ' + esc(fmtDur(dmin)) : ''}` : 'Nada anotado'}${F.tipo ? ' · solo ' + esc(tipoOf(F.tipo)[0].toLowerCase()) : ''}</p></div>
+        <button class="btn sm" type="button" data-addtask>${ICON.plus}Anotar</button></div>
+      <div class="entries">${dayTasks.length ? dayTasks.map(t => entryHtml(t)).join('') : `<button type="button" class="dd-free" data-addtask>Libre · toca para anotar algo</button>`}</div>
+      ${dreps.length ? `<div class="day-reps"><h5>Reparaciones registradas este día</h5>${dreps.map(r => `<button type="button" class="rep-l" data-rep="${r.id}"><span>${esc(r.modelo)} · ${esc(r.cliente)}</span>${pill(REP_ESTADO, r.estado)}</button>`).join('')}</div>` : ''}`;
   },
 };
 
@@ -1721,84 +1794,99 @@ async function toggleTask(id) {
   const t = S.cal.find(x => x.id === id);
   if (!t) return;
   const res = await saveRecord('cal', { estado: t.estado === 'hecha' ? 'pendiente' : 'hecha' }, { id, prevT: t._t });
-  if (!res.ok) { toast(res.deleted ? 'Esa tarea la acaba de borrar otra persona.' : 'Otra persona acaba de cambiar esta tarea. Ya ves su versión: vuelve a intentarlo.', 'err'); render(); return; }
+  if (!res.ok) { toast(res.deleted ? 'Esa anotación la acaba de borrar otra persona.' : 'Otra persona acaba de cambiar esta anotación. Ya ves su versión: vuelve a intentarlo.', 'err'); render(); return; }
   render();
-  savedToast(res.saved, res.row?.estado === 'hecha' ? 'Tarea hecha' : 'Tarea pendiente otra vez');
+  savedToast(res.saved, res.row?.estado === 'hecha' ? (claseOf(t) === 'entrega' ? 'Móvil entregado' : 'Hecho') : 'Pendiente otra vez');
 }
 
 function openCalForm(rec, pre = {}) {
-  const r = rec || { fecha: todayISO(), tipo: 'pantalla', estado: 'pendiente', ...pre };
+  const r = rec || { fecha: todayISO(), clase: 'reparacion', tipo: 'otro', estado: 'pendiente', ...pre };
+  const cl = claseOf(r);
   const newId = uuid();
+  const today = todayISO();
+  const PH = { reparacion: 'Cambiar pantalla, revisar batería…', entrega: 'Cobrar 120 €, llevar funda…', otro: 'Pedir pieza, llamar al proveedor…' };
   const m = openLayer(`
-    <div class="modal-h"><h2>${rec ? 'Editar tarea' : 'Nueva tarea'}</h2><button class="icon-btn sm" data-close aria-label="Cerrar">${ICON.x}</button></div>
+    <div class="modal-h"><h2>${rec ? 'Editar anotación' : 'Anotar en el diario'}</h2><button class="icon-btn sm" data-close aria-label="Cerrar">${ICON.x}</button></div>
     <form class="modal-b" novalidate>
       <div class="form-alert"></div>
-      <div class="fg"><span class="lbl">Tipo de reparación</span><div class="tipos" role="radiogroup">${Object.entries(CAL_TIPOS).map(([k, [l, c]]) =>
-        `<input type="radio" id="tp-${k}" name="tipo" value="${k}" ${r.tipo === k ? 'checked' : ''}><label for="tp-${k}" style="--c:${c}"><i></i>${esc(l)}</label>`).join('')}</div></div>
-      ${textField('tarea', 'Qué hay que hacer', r.tarea, { ph: 'Cambiar pantalla, revisar batería, recoger pieza…', full: true })}
-      <div class="grid3">
-        ${textField('fecha', 'Día', r.fecha, { type: 'date' })}
-        ${textField('hora_inicio', 'Hora de inicio', r.hora_inicio, { type: 'time', opt: true })}
-        ${textField('hora_fin', 'Hora de fin', r.hora_fin, { type: 'time', opt: true })}
-      </div>
-      <div class="note-line" id="calDur"></div>
-      <div class="grid3">
-        ${textField('modelo', 'Modelo', r.modelo, { opt: true, ph: 'iPhone 13, Galaxy A54…', list: 'dl-modelos' })}
-        ${textField('cliente', 'Cliente', r.cliente, { opt: true, ph: 'Nombre', list: 'dl-clientes' })}
+      <div class="clases" role="radiogroup" aria-label="Qué es">${Object.entries(CAL_CLASE).map(([k, [l, ic]]) =>
+        `<input type="radio" id="cl-${k}" name="clase" value="${k}" ${cl === k ? 'checked' : ''}><label for="cl-${k}">${ICON[ic]}<span>${esc(l)}</span></label>`).join('')}</div>
+      <div class="grid2">
+        ${textField('cliente', 'Cliente', r.cliente, { opt: true, ph: 'Guillermo', list: 'dl-clientes' })}
         ${textField('telefono', 'Teléfono', r.telefono, { opt: true, type: 'tel', ph: '600 000 000' })}
       </div>
-      <div class="fg"><span class="lbl">Estado</span>${segHtml('estado', CAL_ESTADO, r.estado, ['o', 'b', 'g'])}</div>
+      <div class="fg"><label for="f-fecha">Día</label>
+        <div class="quick">${[[today, 'Hoy'], [addDays(today, 1), 'Mañana'], [addDays(today, 2), 'Pasado mañana']].map(([d, l]) => `<button type="button" class="chip" data-qd="${d}" aria-pressed="${r.fecha === d}">${l}</button>`).join('')}</div>
+        <input class="field" id="f-fecha" name="fecha" type="date" value="${esc(r.fecha)}"><span class="err"></span></div>
+      <div class="grid2">
+        ${textField('hora_inicio', 'Hora', r.hora_inicio, { type: 'time', opt: true })}
+        ${textField('hora_fin', 'Hasta', r.hora_fin, { type: 'time', opt: true })}
+      </div>
+      <div class="note-line" id="calDur"></div>
+      ${textField('modelo', 'Móvil', r.modelo, { opt: true, ph: 'iPhone 13, Galaxy A54…', list: 'dl-modelos' })}
+      <div class="fg" id="fgTipo"><span class="lbl">Tipo de reparación</span><div class="tipos" role="radiogroup">${Object.entries(CAL_TIPOS).map(([k, [l, c]]) =>
+        `<input type="radio" id="tp-${k}" name="tipo" value="${k}" ${(r.tipo || 'otro') === k ? 'checked' : ''}><label for="tp-${k}" style="--c:${c}"><i></i>${esc(l)}</label>`).join('')}</div></div>
+      ${textField('tarea', 'Qué hay que hacer', r.tarea, { opt: true, ph: PH[cl], full: true })}
+      ${rec ? `<div class="fg"><span class="lbl">Estado</span>${segHtml('estado', CAL_ESTADO, r.estado, ['o', 'b', 'g'])}</div>` : ''}
       <div class="fg full"><label for="f-notas">Notas <span class="opt">(opcional)</span></label><textarea class="field" id="f-notas" name="notas" rows="2">${esc(r.notas || '')}</textarea></div>
-      <datalist id="dl-clientes">${[...new Set([...S.rep.map(x => x.cliente), ...S.cal.map(x => x.cliente)].filter(Boolean))].slice(0, 300).map(v => `<option value="${esc(v)}">`).join('')}</datalist>
-      <datalist id="dl-modelos">${[...new Set([...S.rep.map(x => x.modelo), ...S.mov.map(x => x.modelo), ...S.cal.map(x => x.modelo)].filter(v => v && v !== 'Sin especificar'))].slice(0, 300).map(v => `<option value="${esc(v)}">`).join('')}</datalist>
+      <datalist id="dl-clientes">${[...new Set([...S.cal.map(x => x.cliente), ...S.rep.map(x => x.cliente)].filter(Boolean))].slice(0, 300).map(v => `<option value="${esc(v)}">`).join('')}</datalist>
+      <datalist id="dl-modelos">${[...new Set([...S.cal.map(x => x.modelo), ...S.rep.map(x => x.modelo), ...S.mov.map(x => x.modelo)].filter(v => v && v !== 'Sin especificar'))].slice(0, 300).map(v => `<option value="${esc(v)}">`).join('')}</datalist>
     </form>
-    <div class="modal-f"><span class="meta">${formMeta(rec)}</span>${rec ? `<button class="btn ghost" type="button" data-del>${ICON.del}Eliminar</button><button class="btn ghost" type="button" data-torep>${ICON.wrench}Pasar a reparaciones</button>` : ''}<button class="btn" data-close type="button">Cancelar</button><button class="btn primary" type="button" data-save>${ICON.check}${rec ? 'Guardar cambios' : 'Guardar tarea'}</button></div>`);
+    <div class="modal-f"><span class="meta">${formMeta(rec)}</span>${rec ? `<button class="btn ghost" type="button" data-del>${ICON.del}Eliminar</button>${cl === 'reparacion' ? `<button class="btn ghost" type="button" data-torep>${ICON.wrench}Pasar a reparaciones</button>` : ''}` : ''}<button class="btn" data-close type="button">Cancelar</button><button class="btn primary" type="button" data-save>${ICON.check}${rec ? 'Guardar cambios' : 'Guardar'}</button></div>`);
   const form = m.querySelector('form');
   const val = n => form.elements[n]?.value ?? '';
   const info = () => {
+    const c = val('clase');
+    m.querySelector('#fgTipo').hidden = c !== 'reparacion';
+    m.querySelector('#f-tarea').placeholder = PH[c] || '';
+    $$('[data-qd]', m).forEach(b => b.setAttribute('aria-pressed', b.dataset.qd === val('fecha')));
     const a = val('hora_inicio'), b = val('hora_fin'), f = val('fecha');
-    const t = { hora_inicio: a, hora_fin: b };
     const clash = a ? S.cal.filter(x => x.id !== rec?.id && x.fecha === f && x.hora_inicio && (b
       ? hm(x.hora_inicio) < hm(b) && hm(a) < (x.hora_fin ? hm(x.hora_fin) : hm(x.hora_inicio) + 1)
       : x.hora_inicio === a)) : [];
     const parts = [];
-    if (a && b && hm(b) > hm(a)) parts.push(`Duración: <b>${esc(fmtDur(durMin(t)))}</b>`);
-    if (clash.length) parts.push(`<span class="c-o">Coincide con: ${clash.map(x => esc(timeRange(x) + ' ' + x.tarea)).join(', ')}</span>`);
+    if (a && b && hm(b) > hm(a)) parts.push(`Duración: <b>${esc(fmtDur(hm(b) - hm(a)))}</b>`);
+    if (clash.length) parts.push(`<span class="c-o">Coincide con: ${clash.map(x => esc(x.hora_inicio + ' ' + calTitle(x))).join(', ')}</span>`);
     m.querySelector('#calDur').innerHTML = parts.length ? ICON.info + `<span>${parts.join(' · ')}</span>` : '';
   };
-  form.addEventListener('input', info); form.addEventListener('change', info); info();
+  form.addEventListener('input', info); form.addEventListener('change', info);
+  m.addEventListener('click', e => { const q = e.target.closest('[data-qd]'); if (q) { form.elements.fecha.value = q.dataset.qd; info(); } });
+  info();
   m.querySelector('[data-del]')?.addEventListener('click', () => { closeLayer(); askDelete('cal', rec.id); });
   m.querySelector('[data-torep]')?.addEventListener('click', () => {
     closeLayer();
-    openRepForm(null, { fecha: rec.fecha, cliente: rec.cliente || '', modelo: rec.modelo || '', telefono: rec.telefono || '', descripcion: `${tipoOf(rec.tipo)[0]}: ${rec.tarea}` });
+    openRepForm(null, { fecha: rec.fecha, cliente: rec.cliente || '', modelo: rec.modelo || '', telefono: rec.telefono || '', descripcion: [rec.tipo && rec.tipo !== 'otro' ? tipoOf(rec.tipo)[0] : '', rec.tarea].filter(Boolean).join(': ') });
   });
   const save = async () => {
     let bad = false;
     const err = (n, msg) => { fgErr(form, n, msg); if (msg) bad = true; };
     const v = {};
-    v.tipo = val('tipo') || 'otro';
-    v.tarea = val('tarea').trim(); err('tarea', v.tarea ? '' : 'Escribe qué hay que hacer');
+    v.clase = val('clase') || 'reparacion';
+    v.tipo = v.clase === 'reparacion' ? (val('tipo') || 'otro') : null;
+    v.cliente = val('cliente').trim() || null;
+    v.tarea = val('tarea').trim() || null;
+    err('cliente', v.cliente || v.tarea ? '' : 'Escribe el cliente o qué hay que hacer');
     v.fecha = val('fecha'); err('fecha', validDate(v.fecha) ? '' : 'Pon un día válido');
     v.hora_inicio = val('hora_inicio') || null; v.hora_fin = val('hora_fin') || null;
     err('hora_inicio', v.hora_inicio && !HM_RE.test(v.hora_inicio) ? 'Hora no válida' : '');
-    err('hora_fin', !v.hora_fin ? '' : !HM_RE.test(v.hora_fin) ? 'Hora no válida' : !v.hora_inicio ? 'Pon también la hora de inicio' : hm(v.hora_fin) <= hm(v.hora_inicio) ? 'Tiene que ser después del inicio' : '');
-    v.modelo = val('modelo').trim() || null; v.cliente = val('cliente').trim() || null;
+    err('hora_fin', !v.hora_fin ? '' : !HM_RE.test(v.hora_fin) ? 'Hora no válida' : !v.hora_inicio ? 'Pon también la hora' : hm(v.hora_fin) <= hm(v.hora_inicio) ? 'Tiene que ser después' : '');
+    v.modelo = val('modelo').trim() || null;
     v.telefono = val('telefono').trim() || null;
     err('telefono', v.telefono && !/^[+\d][\d\s().-]{5,}$/.test(v.telefono) ? 'Teléfono no válido' : '');
-    v.estado = val('estado') || 'pendiente';
+    v.estado = rec ? (val('estado') || 'pendiente') : 'pendiente';
     v.notas = val('notas').trim() || null;
     if (bad) { form.querySelector('.fg.bad .field')?.focus(); return; }
     const btn = m.querySelector('[data-save]'); btn.disabled = true;
     const res = await saveRecord('cal', v, { id: rec?.id, newId, prevT: rec?._t });
     btn.disabled = false;
     if (!res.ok) {
-      m.querySelector('.form-alert').innerHTML = `<div class="alert r">${ICON.info}<p>${res.deleted ? 'Otra persona ha borrado esta tarea mientras la editabas.' : 'Otra persona ha modificado esta tarea mientras la editabas. Cierra y vuelve a abrirla para ver su versión.'}</p></div>`;
+      m.querySelector('.form-alert').innerHTML = `<div class="alert r">${ICON.info}<p>${res.deleted ? 'Otra persona ha borrado esta anotación mientras la editabas.' : 'Otra persona ha modificado esta anotación mientras la editabas. Cierra y vuelve a abrirla para ver su versión.'}</p></div>`;
       return;
     }
     closeLayer();
     S.calF.day = v.fecha; S.calF.month = v.fecha.slice(0, 7);
     render();
-    savedToast(res.saved, rec ? 'Tarea guardada' : 'Tarea añadida al calendario');
+    savedToast(res.saved, rec ? 'Guardado' : 'Anotado en el diario');
   };
   m.querySelector('[data-save]').addEventListener('click', save);
   form.addEventListener('submit', e => { e.preventDefault(); save(); });
@@ -1855,7 +1943,7 @@ async function downloadBackup({ silent = false } = {}) {
   const data = { app: BACKUP_APP, version: 1, exportado: new Date().toISOString(), desde_servidor: fresh, reparaciones: S.rep, moviles: S.mov, agenda: S.cal.map(({ _t, ...t }) => t) };
   const now = new Date();
   download(`almantec-copia-${stamp()}-${pad2(now.getHours())}${pad2(now.getMinutes())}.json`, JSON.stringify(data, null, 2), 'application/json');
-  if (!silent) toast(`Copia descargada: ${S.rep.length} reparaciones, ${S.mov.length} móviles y ${S.cal.length} tareas`);
+  if (!silent) toast(`Copia descargada: ${S.rep.length} reparaciones, ${S.mov.length} móviles y ${S.cal.length} anotaciones`);
   return true;
 }
 const pick = (o, cols) => { const r = {}; for (const c of cols) if (c in o) r[c] = o[c] === '' ? null : o[c]; return r; };
@@ -1883,10 +1971,10 @@ function checkBackup(obj) {
   if (Array.isArray(obj.agenda)) {
     cal = [];
     obj.agenda.forEach((t, i) => {
-      const bad = !UUID_RE.test(t.id || '') || !validDate(t.fecha) || !String(t.tarea || '').trim() || !CAL_ESTADO[t.estado]
+      const bad = !UUID_RE.test(t.id || '') || !validDate(t.fecha) || !(String(t.tarea || '').trim() || String(t.cliente || '').trim()) || !CAL_ESTADO[t.estado]
         || (t.hora_inicio && !HM_RE.test(t.hora_inicio)) || (t.hora_fin && !HM_RE.test(t.hora_fin));
-      if (bad) errs.push(`Tarea ${i + 1} del calendario (${t.tarea || 'sin texto'}) tiene datos incompletos o no válidos.`);
-      else cal.push({ id: t.id, ...pick(t, CAL_COLS), tipo: CAL_TIPOS[t.tipo] ? t.tipo : 'otro', ...(t.creado_en ? { creado_en: t.creado_en } : {}) });
+      if (bad) errs.push(`Anotación ${i + 1} del diario (${t.cliente || t.tarea || 'sin texto'}) tiene datos incompletos o no válidos.`);
+      else cal.push({ id: t.id, ...pick(t, CAL_COLS), clase: CAL_CLASE[t.clase] ? t.clase : 'reparacion', tipo: CAL_TIPOS[t.tipo] ? t.tipo : (t.clase && t.clase !== 'reparacion' ? null : 'otro'), ...(t.creado_en ? { creado_en: t.creado_en } : {}) });
     });
   }
   return { errs, rep, mov, cal };
@@ -1910,15 +1998,15 @@ async function restoreFlow(file) {
   const m = openLayer(`
     <div class="modal-h"><h2>Restaurar copia de seguridad</h2><button class="icon-btn sm" data-close aria-label="Cerrar">${ICON.x}</button></div>
     <div class="modal-b">
-      <p style="margin:0">Copia del <b>${esc(fmtDateTime(obj.exportado))}</b>${obj.por ? ` hecha por ${esc(obj.por)}` : ''}: <b>${rep.length}</b> reparaciones, <b>${mov.length}</b> móviles${cal ? ` y <b>${cal.length}</b> tareas del calendario` : ''}.</p>
+      <p style="margin:0">Copia del <b>${esc(fmtDateTime(obj.exportado))}</b>${obj.por ? ` hecha por ${esc(obj.por)}` : ''}: <b>${rep.length}</b> reparaciones, <b>${mov.length}</b> móviles${cal ? ` y <b>${cal.length}</b> anotaciones del diario` : ''}.</p>
       ${errs.length ? `<div class="alert o">${ICON.info}<div><p>${errs.length} registro${errs.length === 1 ? '' : 's'} no se pueden importar y se saltarán:</p><ul>${errs.slice(0, 6).map(e => `<li>${esc(e)}</li>`).join('')}${errs.length > 6 ? `<li>y ${errs.length - 6} más</li>` : ''}</ul></div></div>` : ''}
       <dl class="kv"><dt>Reparaciones nuevas</dt><dd>${cr.nuevos}</dd><dt>Reparaciones que cambian</dt><dd>${cr.cambian}</dd><dt>Reparaciones iguales</dt><dd>${cr.iguales}</dd>
       <dt>Móviles nuevos</dt><dd>${cm.nuevos}</dd><dt>Móviles que cambian</dt><dd>${cm.cambian}</dd><dt>Móviles iguales</dt><dd>${cm.iguales}</dd>
-      ${cc ? `<dt>Tareas nuevas</dt><dd>${cc.nuevos}</dd><dt>Tareas que cambian</dt><dd>${cc.cambian}</dd>` : ''}
-      <dt>En los datos actuales y no en la copia</dt><dd>${cr.sobran} reparaciones · ${cm.sobran} móviles${cc ? ` · ${cc.sobran} tareas` : ''}</dd></dl>
+      ${cc ? `<dt>Anotaciones nuevas</dt><dd>${cc.nuevos}</dd><dt>Anotaciones que cambian</dt><dd>${cc.cambian}</dd>` : ''}
+      <dt>En los datos actuales y no en la copia</dt><dd>${cr.sobran} reparaciones · ${cm.sobran} móviles${cc ? ` · ${cc.sobran} anotaciones` : ''}</dd></dl>
       <div class="fg"><span class="lbl">Cómo restaurar</span>
         <label class="check"><input type="radio" name="mode" value="merge" checked><span><b>Añadir y actualizar</b> (recomendado). Añade lo nuevo y actualiza lo que cambió. No borra nada.</span></label>
-        <label class="check"><input type="radio" name="mode" value="replace"><span><b>Dejar exactamente como la copia.</b> Además borra ${cr.sobran} reparaciones, ${cm.sobran} móviles${cc ? ` y ${cc.sobran} tareas` : ''} que no están en la copia. Antes se descarga una copia de lo actual.</span></label>
+        <label class="check"><input type="radio" name="mode" value="replace"><span><b>Dejar exactamente como la copia.</b> Además borra ${cr.sobran} reparaciones, ${cm.sobran} móviles${cc ? ` y ${cc.sobran} anotaciones` : ''} que no están en la copia. Antes se descarga una copia de lo actual.</span></label>
       </div>
       <div class="form-alert"></div>
     </div>
@@ -1927,7 +2015,7 @@ async function restoreFlow(file) {
     const mode = m.querySelector('input[name="mode"]:checked').value;
     const btn = m.querySelector('[data-go]');
     if (mode === 'replace') {
-      const ok = await confirmBox({ title: '¿Seguro?', body: `<p style="margin:0">Se borrarán ${cr.sobran} reparaciones, ${cm.sobran} móviles${cc ? ` y ${cc.sobran} tareas` : ''} que no están en la copia, para todos los dispositivos. Antes descargaré una copia de los datos actuales.</p>`, ok: 'Sí, dejarlo como la copia', danger: true });
+      const ok = await confirmBox({ title: '¿Seguro?', body: `<p style="margin:0">Se borrarán ${cr.sobran} reparaciones, ${cm.sobran} móviles${cc ? ` y ${cc.sobran} anotaciones` : ''} que no están en la copia, para todos los dispositivos. Antes descargaré una copia de los datos actuales.</p>`, ok: 'Sí, dejarlo como la copia', danger: true });
       if (!ok) return;
     }
     btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Restaurando…';
@@ -1961,7 +2049,7 @@ async function restoreFlow(file) {
       render();
       if (missing) toast(`Restaurado, pero faltan ${missing} registros. Vuelve a intentarlo.`, 'err');
       else if (!saved) toast('Copia restaurada en este dispositivo. Sin conexión con GitHub: se subirá sola al volver la conexión.', 'warn', 8000);
-      else toast(`Copia restaurada, comprobada y subida a GitHub: ${rep.length} reparaciones${cal ? `, ${mov.length} móviles y ${cal.length} tareas` : ` y ${mov.length} móviles`}`);
+      else toast(`Copia restaurada, comprobada y subida a GitHub: ${rep.length} reparaciones${cal ? `, ${mov.length} móviles y ${cal.length} anotaciones` : ` y ${mov.length} móviles`}`);
     } catch (e) {
       if (entry) entry.busy = false;
       btn.disabled = false; btn.textContent = 'Restaurar';

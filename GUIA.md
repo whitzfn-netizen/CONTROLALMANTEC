@@ -57,9 +57,9 @@ Ese archivo tiene nombres de clientes: no lo subas al repositorio.
 
 La app avisa con **«Renueva el acceso a GitHub»**. Crea un token nuevo con los mismos pasos del apartado 2 y pégalo. Los datos no se tocan.
 
-## Calendario
+## Diario
 
-En la pestaña **Calendario** planificas las reparaciones de cada mes: pulsa un día y luego **Añadir** (o **Nueva tarea**). Cada tarea lleva el tipo de reparación (con su color), qué hay que hacer, la hora de inicio y fin, el modelo y el cliente. Con el círculo la marcas como hecha. Desde una tarea, **Pasar a reparaciones** abre una reparación ya rellenada para apuntar lo cobrado. Las tareas se guardan cifradas igual que el resto y entran en la copia de seguridad.
+En la pestaña **Diario** ves hoy marcado y debajo los días siguientes con lo que tienes anotado. Arriba hay una tira con todos los días del mes: pulsa uno para saltar a él. Con **Anotar** (o el botón de cada día) apuntas una reparación, un móvil que entregar u otra cosa, con el cliente, la hora y el móvil. El círculo lo marca como hecho. Lo que quedó sin hacer de días pasados sale arriba en naranja. El botón **Mes** enseña el mes completo en cuadrícula. Desde una reparación anotada, **Pasar a reparaciones** abre la reparación ya rellenada para apuntar lo cobrado. Todo se guarda cifrado y entra en la copia de seguridad.
 
 ## Límites que conviene saber
 
