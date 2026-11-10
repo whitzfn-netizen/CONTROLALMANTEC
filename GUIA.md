@@ -57,6 +57,10 @@ Ese archivo tiene nombres de clientes: no lo subas al repositorio.
 
 La app avisa con **«Renueva el acceso a GitHub»**. Crea un token nuevo con los mismos pasos del apartado 2 y pégalo. Los datos no se tocan.
 
+## Calendario
+
+En la pestaña **Calendario** planificas las reparaciones de cada mes: pulsa un día y luego **Añadir** (o **Nueva tarea**). Cada tarea lleva el tipo de reparación (con su color), qué hay que hacer, la hora de inicio y fin, el modelo y el cliente. Con el círculo la marcas como hecha. Desde una tarea, **Pasar a reparaciones** abre una reparación ya rellenada para apuntar lo cobrado. Las tareas se guardan cifradas igual que el resto y entran en la copia de seguridad.
+
 ## Límites que conviene saber
 
 - Quien tenga la clave del negocio puede ver y cambiar todo. No hay usuarios separados.

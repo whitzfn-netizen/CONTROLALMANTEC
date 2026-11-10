@@ -66,6 +66,8 @@ const ICON = {
   left: '<svg class="i s" viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></svg>',
   right: '<svg class="i s" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg>',
   lock: '<svg class="i" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
+  cal: '<svg class="i" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>',
+  plus: '<svg class="i s" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
   cloudOff: '<svg class="i" viewBox="0 0 24 24"><path d="M3 3l18 18M8 7a6 6 0 0 1 9.7 3.1A4.5 4.5 0 0 1 20 18.5M17 19H7a5 5 0 0 1-1.6-9.7"/></svg>',
 };
 
@@ -78,12 +80,13 @@ const actPill = kind => kind === 'rep' ? '<span class="pill t-v">Reparación</sp
 
 /* ---------- Estado ---------- */
 const S = {
-  rep: [], mov: [], ready: false,
+  rep: [], mov: [], cal: [], ready: false,
   tab: 'dash', mounted: null,
   dash: { donut: 'mes' },
   repF: { q: '', mes: '', estado: '', pago: '', sort: 'fecha', dir: -1, limit: 100 },
   movF: { q: '', mes: '', estado: '', cobro: '', sort: 'fecha_compra', dir: -1, limit: 100 },
   mesF: { month: curMonth(), act: 'all', sort: 'fecha', dir: -1 },
+  calF: { month: curMonth(), day: todayISO(), tipo: '' },
   totF: { q: '', act: 'all', year: '', mYear: curMonth().slice(0, 4), sort: 'fecha', dir: -1, limit: 100 },
 };
 const derived = () => {
@@ -157,7 +160,7 @@ const utf8b64 = str => b64(enc.encode(str));
 const SYNC_CRED = 'almantec-cn.sync', SYNC_CACHE = 'almantec-cn.sync.cache';
 const SYNC_APP = 'almantec-control-sync', SYNC_ITER = 310000, SYNC_TOMB_MS = 180 * 86400000;
 const TOKEN_URL = 'https://github.com/settings/personal-access-tokens/new';
-const COLS = { rep: 'reparaciones', mov: 'moviles' };
+const COLS = { rep: 'reparaciones', mov: 'moviles', cal: 'agenda' };
 
 const Sync = {
   cfg: null, cred: null, aes: null, docs: {}, sha: null, etag: null, ver: 0, saved: 0, saving: false, again: false, timer: 0,
@@ -536,8 +539,9 @@ const Sync = {
 
 /* ---------- Registros: de los datos sincronizados a las listas de la app ---------- */
 const REP_COLS = ['fecha', 'cliente', 'telefono', 'modelo', 'descripcion', 'facturado', 'coste_pieza', 'otros_costes', 'estado', 'estado_pago', 'fecha_pago', 'notas'];
+const CAL_COLS = ['fecha', 'hora_inicio', 'hora_fin', 'tipo', 'tarea', 'modelo', 'cliente', 'telefono', 'estado', 'notas'];
 const MOV_COLS = ['fecha_compra', 'fecha_venta', 'marca', 'modelo', 'imei', 'precio_compra', 'costes_adicionales', 'precio_venta', 'estado', 'fecha_cobro', 'notas'];
-const listOf = kind => kind === 'rep' ? 'rep' : 'mov';
+const listOf = kind => kind;
 const money2 = c => Math.round(c) / 100;
 
 // El beneficio no se guarda: siempre se calcula de los importes, así nunca puede quedar desfasado.
@@ -547,16 +551,18 @@ function withProfit(kind, d) {
   return { ...d, beneficio: sold ? money2(C.cents(d.precio_venta) - C.cents(d.precio_compra) - C.cents(d.costes_adicionales)) : null };
 }
 function rebuild() {
-  const rep = [], mov = [];
+  const rep = [], mov = [], cal = [];
   for (const [k, v] of Object.entries(Sync.docs)) {
     if (v.x || !v.d) continue;
     const i = k.indexOf('/'), col = k.slice(0, i), id = k.slice(i + 1);
     if (col === COLS.rep) rep.push({ ...withProfit('rep', v.d), id, _t: v.t });
     else if (col === COLS.mov) mov.push({ ...withProfit('mov', v.d), id, _t: v.t });
+    else if (col === COLS.cal) cal.push({ ...v.d, id, _t: v.t });
   }
   rep.sort((a, b) => (a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : 0));
   mov.sort((a, b) => (a.fecha_compra < b.fecha_compra ? 1 : a.fecha_compra > b.fecha_compra ? -1 : 0));
-  S.rep = rep; S.mov = mov;
+  cal.sort(calSort);
+  S.rep = rep; S.mov = mov; S.cal = cal;
 }
 const onDocsChanged = debounce(() => { rebuild(); if (S.ready) render(); }, 30);
 
@@ -589,7 +595,7 @@ function openStatus() {
       <dl class="kv"><dt>Repositorio</dt><dd>${esc(Sync.cfg.owner)}/${esc(Sync.cfg.repo)} · rama ${esc(Sync.cfg.branch)}</dd>
         <dt>Último guardado desde aquí</dt><dd>${Sync.lastSave ? esc(fmtDateTime(Sync.lastSave.toISOString())) : '—'}</dd>
         <dt>Última comprobación</dt><dd>${Sync.lastPull ? esc(fmtDateTime(Sync.lastPull.toISOString())) : '—'}</dd>
-        <dt>Registros</dt><dd>${S.rep.length} reparaciones · ${S.mov.length} móviles</dd></dl>
+        <dt>Registros</dt><dd>${S.rep.length} reparaciones · ${S.mov.length} móviles · ${S.cal.length} tareas del calendario</dd></dl>
       <p class="muted" style="margin:0;font-size:12.5px">Los cambios de otros dispositivos aparecen solos en unos 15 segundos con la página abierta.</p>
     </div>
     <div class="modal-f"><button class="btn ghost" type="button" data-c="key">Cambiar la clave</button><button class="btn ghost" type="button" data-c="out">Desconectar este dispositivo</button><button class="btn primary" type="button" data-close>Listo</button></div>`, { cls: 'narrow' });
@@ -654,12 +660,14 @@ async function deleteRecord(kind, rec) {
 async function askDelete(kind, id) {
   const rec = S[listOf(kind)].find(r => r.id === id);
   if (!rec) return;
-  const what = kind === 'rep'
+  const what = kind === 'cal'
+    ? `la tarea <b>${esc(rec.tarea)}</b> del ${esc(fmtDate(rec.fecha))}${rec.hora_inicio ? ' a las ' + esc(rec.hora_inicio) : ''}`
+    : kind === 'rep'
     ? `la reparación de <b>${esc(rec.cliente)}</b> (${esc(rec.modelo)}, ${esc(fmtDate(rec.fecha))}, ${esc(eurN(rec.facturado))})`
     : `el móvil <b>${esc(rec.marca)} ${esc(rec.modelo)}</b> comprado el ${esc(fmtDate(rec.fecha_compra))}`;
   const ok = await confirmBox({
-    title: kind === 'rep' ? 'Eliminar reparación' : 'Eliminar móvil',
-    body: `<p style="margin:0">Vas a eliminar ${what}. Se borra para todos los dispositivos y las estadísticas se recalculan.</p><div class="alert o">${ICON.info}<p>No se puede deshacer. Si dudas, descarga antes una copia de seguridad (menú Datos).</p></div>`,
+    title: kind === 'cal' ? 'Eliminar tarea' : kind === 'rep' ? 'Eliminar reparación' : 'Eliminar móvil',
+    body: `<p style="margin:0">Vas a eliminar ${what}. Se borra para todos los dispositivos${kind === 'cal' ? '' : ' y las estadísticas se recalculan'}.</p><div class="alert o">${ICON.info}<p>No se puede deshacer. Si dudas, descarga antes una copia de seguridad (menú Datos).</p></div>`,
     ok: 'Eliminar', danger: true,
   });
   if (!ok) return;
@@ -737,8 +745,8 @@ async function submitForm({ kind, form, rec, newId, values, dupCheck }) {
   }
 }
 
-function openRepForm(rec) {
-  const r = rec || { fecha: todayISO(), estado: 'pendiente', estado_pago: 'pendiente' };
+function openRepForm(rec, pre = {}) {
+  const r = rec || { fecha: todayISO(), estado: 'pendiente', estado_pago: 'pendiente', ...pre };
   const newId = uuid();
   const m = openLayer(`
     <div class="modal-h"><h2>${rec ? 'Editar reparación' : 'Nueva reparación'}</h2><button class="icon-btn sm" data-close aria-label="Cerrar">${ICON.x}</button></div>
@@ -926,7 +934,7 @@ function openMovForm(rec) {
 function openRecord(kind, id) {
   const rec = S[listOf(kind)].find(r => r.id === id);
   if (!rec) { toast('Ese registro ya no existe (lo han borrado).', 'err'); return; }
-  kind === 'rep' ? openRepForm(rec) : openMovForm(rec);
+  kind === 'rep' ? openRepForm(rec) : kind === 'cal' ? openCalForm(rec) : openMovForm(rec);
 }
 
 /* ---------- Gráficos (SVG propio, sin librerías) ---------- */
@@ -1116,6 +1124,8 @@ function render() {
   const d = derived();
   const pendRep = S.rep.filter(r => r.estado !== 'finalizada').length;
   const tr = $('#tabRepN'); tr.hidden = !pendRep; tr.textContent = pendRep; tr.title = 'Reparaciones sin finalizar';
+  const hoy = S.cal.filter(t => t.fecha === todayISO() && t.estado !== 'hecha').length;
+  const tc = $('#tabCalN'); tc.hidden = !hoy; tc.textContent = hoy; tc.title = 'Tareas de hoy sin hacer';
   const avail = d.inv.disponibles + d.inv.reservados;
   const tm = $('#tabMovN'); tm.hidden = !avail; tm.textContent = avail; tm.title = 'Móviles sin vender';
   tm.style.background = 'var(--blue-bg)'; tm.style.color = 'var(--blue)';
@@ -1580,6 +1590,221 @@ VIEWS.total = {
   },
 };
 
+/* ---------- CALENDARIO ---------- */
+// Colores por tipo: orden fijo de la paleta validada (modo oscuro); «Otro» en gris. Cada tipo lleva siempre su nombre al lado.
+const CAL_TIPOS = {
+  pantalla: ['Pantalla', '#3987e5'], bateria: ['Batería', '#d95926'], carga: ['Conector de carga', '#199e70'], camara: ['Cámara', '#c98500'],
+  trasera: ['Tapa / cristal trasero', '#d55181'], placa: ['Placa / mojado', '#008300'], software: ['Software / desbloqueo', '#9085e9'], otro: ['Otro', '#848d98'],
+};
+const CAL_ESTADO = { pendiente: ['Pendiente', 't-o'], en_proceso: ['En proceso', 't-b'], hecha: ['Hecha', 't-g'] };
+const WEEK = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+const WEEK_L = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+const HM_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+const hm = s => { const [h, m] = String(s || '').split(':').map(Number); return h * 60 + m; };
+const durMin = t => t.hora_inicio && t.hora_fin ? Math.max(0, hm(t.hora_fin) - hm(t.hora_inicio)) : 0;
+const fmtDur = m => !m ? '' : m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ' ' + (m % 60) + ' min' : ''}`;
+const tipoOf = k => CAL_TIPOS[k] || CAL_TIPOS.otro;
+const calSort = (a, b) => (a.fecha + (a.hora_inicio || '99')).localeCompare(b.fecha + (b.hora_inicio || '99'));
+const dayLong = iso => { const d = new Date(iso + 'T12:00:00'); return `${WEEK_L[d.getDay()]} ${d.getDate()} de ${MONTHS[d.getMonth()].toLowerCase()}`; };
+const timeRange = t => t.hora_inicio ? t.hora_inicio + (t.hora_fin ? '–' + t.hora_fin : '') : 'Sin hora';
+const addMonths = (k, n) => { let [y, m] = k.split('-').map(Number); m += n; while (m < 1) { m += 12; y--; } while (m > 12) { m -= 12; y++; } return `${y}-${pad2(m)}`; };
+// Días que se ven en la cuadrícula: semanas completas de lunes a domingo que cubren el mes.
+function calDays(month) {
+  const [y, m] = month.split('-').map(Number);
+  const first = new Date(y, m - 1, 1), last = new Date(y, m, 0);
+  const start = new Date(first); start.setDate(1 - ((first.getDay() + 6) % 7));
+  const end = new Date(last); end.setDate(last.getDate() + (6 - ((last.getDay() + 6) % 7)));
+  const out = [];
+  for (const d = start; d <= end; d.setDate(d.getDate() + 1)) out.push(`${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`);
+  return out;
+}
+
+VIEWS.cal = {
+  shell: () => `
+    <div class="sec-h"><div><h2 id="cTitle"></h2><p>Planifica las reparaciones del mes: qué hay que hacer, a qué hora y de qué tipo.</p></div>
+      <div class="row"><div class="yearbar"><button class="icon-btn" type="button" data-cm="-1" aria-label="Mes anterior">${ICON.left}</button><button class="btn sm" type="button" data-cm="0">Hoy</button><button class="icon-btn" type="button" data-cm="1" aria-label="Mes siguiente">${ICON.right}</button></div>
+      <button class="btn primary" type="button" data-addtask>${ICON.cal}Nueva tarea</button></div></div>
+    <section class="kpis" id="cK"></section>
+    <div class="chips" id="cTipos" role="group" aria-label="Filtrar por tipo"></div>
+    <div class="cal-layout">
+      <section class="panel cal"><div class="cal-wk" aria-hidden="true">${WEEK.map(w => `<span>${w}</span>`).join('')}</div><div class="cal-g" id="cGrid"></div></section>
+      <section class="panel day-p" id="cDay" aria-live="polite"></section>
+    </div>`,
+  bind(root) {
+    const F = S.calF;
+    root.addEventListener('click', async e => {
+      const mv = e.target.closest('[data-cm]');
+      if (mv) {
+        const n = +mv.dataset.cm;
+        if (n === 0) { F.month = curMonth(); F.day = todayISO(); } else { F.month = addMonths(F.month, n); F.day = F.month === curMonth() ? todayISO() : F.month + '-01'; }
+        render(); return;
+      }
+      const ch = e.target.closest('[data-chip="tipo"]'); if (ch) { F.tipo = F.tipo === ch.dataset.v ? '' : ch.dataset.v; render(); return; }
+      if (e.target.closest('[data-addtask]')) { openCalForm(null, { fecha: F.day }); return; }
+      const tk = e.target.closest('[data-tick]');
+      if (tk) { e.stopPropagation(); toggleTask(tk.dataset.tick); return; }
+      const t = e.target.closest('[data-task]'); if (t) { openRecord('cal', t.dataset.task); return; }
+      const r = e.target.closest('[data-rep]'); if (r) { openRecord('rep', r.dataset.rep); return; }
+      const d = e.target.closest('[data-day]');
+      if (d) {
+        F.day = d.dataset.day;
+        if (F.day.slice(0, 7) !== F.month) F.month = F.day.slice(0, 7);
+        render();
+        if (matchMedia('(max-width:1100px)').matches) $('#cDay', root).scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+    root.addEventListener('dblclick', e => { const d = e.target.closest('[data-day]'); if (d) openCalForm(null, { fecha: d.dataset.day }); });
+  },
+  update(root) {
+    const F = S.calF;
+    const today = todayISO();
+    $('#cTitle', root).textContent = monthName(F.month);
+    const all = S.cal.filter(t => t.fecha.startsWith(F.month));
+    const tasks = F.tipo ? all.filter(t => t.tipo === F.tipo) : all;
+    const done = tasks.filter(t => t.estado === 'hecha').length;
+    const mins = tasks.reduce((a, t) => a + durMin(t), 0);
+    const late = tasks.filter(t => t.estado !== 'hecha' && t.fecha < today).length;
+    $('#cK', root).innerHTML =
+      kpi({ label: 'Tareas del mes', value: String(tasks.length), icon: ICON.cal, tone: 'b', sub: F.tipo ? esc(tipoOf(F.tipo)[0]) : 'Todos los tipos' })
+      + kpi({ label: 'Pendientes', value: String(tasks.length - done), icon: ICON.clock, tone: 'o', sub: late ? `<span class="c-r">${late} de días pasados</span>` : 'Ninguna atrasada' })
+      + kpi({ label: 'Horas planificadas', value: esc(fmtDur(mins) || '0 h'), icon: ICON.wrench, tone: 'v', sub: 'Suma de las tareas con hora de fin' })
+      + kpi({ label: 'Hechas', value: tasks.length ? Math.round(done / tasks.length * 100) + ' %' : '—', icon: ICON.check, tone: 'g', sub: `<span class="prog"><i style="width:${tasks.length ? done / tasks.length * 100 : 0}%"></i></span>` });
+    const count = k => all.filter(t => t.tipo === k).length;
+    $('#cTipos', root).innerHTML = chipsHtml('tipo', Object.entries(CAL_TIPOS).map(([k, [l, c]]) => [k, l, count(k), c]), F.tipo);
+    $$('#cTipos .chip', root).forEach(b => { if (!count(b.dataset.v) && F.tipo !== b.dataset.v) b.classList.add('dim'); });
+
+    const byDay = new Map();
+    for (const t of tasks) { if (!byDay.has(t.fecha)) byDay.set(t.fecha, []); byDay.get(t.fecha).push(t); }
+    const repDay = new Map();
+    for (const r of S.rep) repDay.set(r.fecha, (repDay.get(r.fecha) || 0) + 1);
+    $('#cGrid', root).innerHTML = calDays(F.month).map(day => {
+      const list = byDay.get(day) || [];
+      const dmin = list.reduce((a, t) => a + durMin(t), 0);
+      const wd = new Date(day + 'T12:00:00').getDay();
+      const cls = ['cal-d', day.slice(0, 7) !== F.month && 'out', day === today && 'today', day === F.day && 'sel', (wd === 0 || wd === 6) && 'we', list.length && 'has'].filter(Boolean).join(' ');
+      const nRep = repDay.get(day) || 0;
+      const pend = list.filter(t => t.estado !== 'hecha').length;
+      const label = `${dayLong(day)}: ${list.length ? list.length + ' tarea' + (list.length === 1 ? '' : 's') + (pend ? `, ${pend} sin hacer` : '') : 'sin tareas'}${nRep ? `, ${nRep} reparaci${nRep === 1 ? 'ón' : 'ones'} registrada${nRep === 1 ? '' : 's'}` : ''}`;
+      return `<button type="button" class="${cls}" data-day="${day}" aria-pressed="${day === F.day}" aria-label="${esc(label)}">
+        <span class="dn"><b>${+day.slice(8)}</b>${nRep ? `<span class="rc" title="Reparaciones registradas este día">${ICON.wrench}<span>${nRep}</span></span>` : ''}</span>
+        ${list.slice(0, 3).map(t => `<span class="ev${t.estado === 'hecha' ? ' done' : ''}" style="--c:${tipoOf(t.tipo)[1]}">${t.hora_inicio ? `<b>${esc(t.hora_inicio)}</b>` : ''}${esc(t.modelo || tipoOf(t.tipo)[0])}</span>`).join('')}
+        ${list.length > 3 ? `<span class="ev-more">+${list.length - 3} más</span>` : ''}
+        ${list.length ? `<span class="dots">${list.slice(0, 6).map(t => `<i style="--c:${tipoOf(t.tipo)[1]}"${t.estado === 'hecha' ? ' class="done"' : ''}></i>`).join('')}</span>` : ''}
+        ${dmin ? `<span class="load" title="${esc(fmtDur(dmin))} planificadas"><i style="width:${Math.min(100, dmin / 480 * 100)}%"></i></span>` : ''}
+      </button>`;
+    }).join('');
+
+    const dayTasks = (byDay.get(F.day) || []);
+    const dmin = dayTasks.reduce((a, t) => a + durMin(t), 0);
+    const reps = S.rep.filter(r => r.fecha === F.day);
+    $('#cDay', root).innerHTML = `
+      <div class="day-h"><div><h3>${esc(dayLong(F.day))}${F.day === today ? ' <span class="pill t-g">Hoy</span>' : ''}</h3>
+        <p>${dayTasks.length ? `${dayTasks.length} tarea${dayTasks.length === 1 ? '' : 's'}${dmin ? ' · ' + esc(fmtDur(dmin)) : ''}` : 'Nada planificado'}${F.tipo ? ' · solo ' + esc(tipoOf(F.tipo)[0].toLowerCase()) : ''}</p></div>
+        <button class="btn sm" type="button" data-addtask>${ICON.plus}Añadir</button></div>
+      <div class="tasks">${dayTasks.length ? dayTasks.map(t => {
+        const [tl, tc] = tipoOf(t.tipo);
+        return `<div class="task${t.estado === 'hecha' ? ' done' : ''}" data-task="${t.id}" style="--c:${tc}" role="button" tabindex="0">
+          <span class="bar"></span>
+          <div class="tb"><span class="tm">${esc(timeRange(t))}${durMin(t) ? ` · ${esc(fmtDur(durMin(t)))}` : ''}</span>
+            <h4>${esc(t.tarea)}</h4>
+            <div class="meta"><span class="tp"><i></i>${esc(tl)}</span>${t.modelo ? `<span>${esc(t.modelo)}</span>` : ''}${t.cliente ? `<span>${esc(t.cliente)}</span>` : ''}${t.estado === 'en_proceso' ? pill(CAL_ESTADO, 'en_proceso') : ''}</div>
+            ${t.notas ? `<p class="nt">${esc(t.notas)}</p>` : ''}</div>
+          <button type="button" class="tick" data-tick="${t.id}" aria-pressed="${t.estado === 'hecha'}" aria-label="${t.estado === 'hecha' ? 'Marcar como pendiente' : 'Marcar como hecha'}">${ICON.check}</button>
+        </div>`;
+      }).join('') : `<div class="day-empty">${ICON.cal}<p>Pulsa <b>Añadir</b> para planificar una reparación este día.</p></div>`}</div>
+      ${reps.length ? `<div class="day-reps"><h5>Reparaciones registradas este día</h5>${reps.map(r => `<button type="button" class="rep-l" data-rep="${r.id}"><span>${esc(r.modelo)} · ${esc(r.cliente)}</span>${pill(REP_ESTADO, r.estado)}</button>`).join('')}</div>` : ''}`;
+    $$('#cDay .task', root).forEach(el => el.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target === el) { e.preventDefault(); openRecord('cal', el.dataset.task); } }));
+  },
+};
+
+async function toggleTask(id) {
+  const t = S.cal.find(x => x.id === id);
+  if (!t) return;
+  const res = await saveRecord('cal', { estado: t.estado === 'hecha' ? 'pendiente' : 'hecha' }, { id, prevT: t._t });
+  if (!res.ok) { toast(res.deleted ? 'Esa tarea la acaba de borrar otra persona.' : 'Otra persona acaba de cambiar esta tarea. Ya ves su versión: vuelve a intentarlo.', 'err'); render(); return; }
+  render();
+  savedToast(res.saved, res.row?.estado === 'hecha' ? 'Tarea hecha' : 'Tarea pendiente otra vez');
+}
+
+function openCalForm(rec, pre = {}) {
+  const r = rec || { fecha: todayISO(), tipo: 'pantalla', estado: 'pendiente', ...pre };
+  const newId = uuid();
+  const m = openLayer(`
+    <div class="modal-h"><h2>${rec ? 'Editar tarea' : 'Nueva tarea'}</h2><button class="icon-btn sm" data-close aria-label="Cerrar">${ICON.x}</button></div>
+    <form class="modal-b" novalidate>
+      <div class="form-alert"></div>
+      <div class="fg"><span class="lbl">Tipo de reparación</span><div class="tipos" role="radiogroup">${Object.entries(CAL_TIPOS).map(([k, [l, c]]) =>
+        `<input type="radio" id="tp-${k}" name="tipo" value="${k}" ${r.tipo === k ? 'checked' : ''}><label for="tp-${k}" style="--c:${c}"><i></i>${esc(l)}</label>`).join('')}</div></div>
+      ${textField('tarea', 'Qué hay que hacer', r.tarea, { ph: 'Cambiar pantalla, revisar batería, recoger pieza…', full: true })}
+      <div class="grid3">
+        ${textField('fecha', 'Día', r.fecha, { type: 'date' })}
+        ${textField('hora_inicio', 'Hora de inicio', r.hora_inicio, { type: 'time', opt: true })}
+        ${textField('hora_fin', 'Hora de fin', r.hora_fin, { type: 'time', opt: true })}
+      </div>
+      <div class="note-line" id="calDur"></div>
+      <div class="grid3">
+        ${textField('modelo', 'Modelo', r.modelo, { opt: true, ph: 'iPhone 13, Galaxy A54…', list: 'dl-modelos' })}
+        ${textField('cliente', 'Cliente', r.cliente, { opt: true, ph: 'Nombre', list: 'dl-clientes' })}
+        ${textField('telefono', 'Teléfono', r.telefono, { opt: true, type: 'tel', ph: '600 000 000' })}
+      </div>
+      <div class="fg"><span class="lbl">Estado</span>${segHtml('estado', CAL_ESTADO, r.estado, ['o', 'b', 'g'])}</div>
+      <div class="fg full"><label for="f-notas">Notas <span class="opt">(opcional)</span></label><textarea class="field" id="f-notas" name="notas" rows="2">${esc(r.notas || '')}</textarea></div>
+      <datalist id="dl-clientes">${[...new Set([...S.rep.map(x => x.cliente), ...S.cal.map(x => x.cliente)].filter(Boolean))].slice(0, 300).map(v => `<option value="${esc(v)}">`).join('')}</datalist>
+      <datalist id="dl-modelos">${[...new Set([...S.rep.map(x => x.modelo), ...S.mov.map(x => x.modelo), ...S.cal.map(x => x.modelo)].filter(v => v && v !== 'Sin especificar'))].slice(0, 300).map(v => `<option value="${esc(v)}">`).join('')}</datalist>
+    </form>
+    <div class="modal-f"><span class="meta">${formMeta(rec)}</span>${rec ? `<button class="btn ghost" type="button" data-del>${ICON.del}Eliminar</button><button class="btn ghost" type="button" data-torep>${ICON.wrench}Pasar a reparaciones</button>` : ''}<button class="btn" data-close type="button">Cancelar</button><button class="btn primary" type="button" data-save>${ICON.check}${rec ? 'Guardar cambios' : 'Guardar tarea'}</button></div>`);
+  const form = m.querySelector('form');
+  const val = n => form.elements[n]?.value ?? '';
+  const info = () => {
+    const a = val('hora_inicio'), b = val('hora_fin'), f = val('fecha');
+    const t = { hora_inicio: a, hora_fin: b };
+    const clash = a ? S.cal.filter(x => x.id !== rec?.id && x.fecha === f && x.hora_inicio && (b
+      ? hm(x.hora_inicio) < hm(b) && hm(a) < (x.hora_fin ? hm(x.hora_fin) : hm(x.hora_inicio) + 1)
+      : x.hora_inicio === a)) : [];
+    const parts = [];
+    if (a && b && hm(b) > hm(a)) parts.push(`Duración: <b>${esc(fmtDur(durMin(t)))}</b>`);
+    if (clash.length) parts.push(`<span class="c-o">Coincide con: ${clash.map(x => esc(timeRange(x) + ' ' + x.tarea)).join(', ')}</span>`);
+    m.querySelector('#calDur').innerHTML = parts.length ? ICON.info + `<span>${parts.join(' · ')}</span>` : '';
+  };
+  form.addEventListener('input', info); form.addEventListener('change', info); info();
+  m.querySelector('[data-del]')?.addEventListener('click', () => { closeLayer(); askDelete('cal', rec.id); });
+  m.querySelector('[data-torep]')?.addEventListener('click', () => {
+    closeLayer();
+    openRepForm(null, { fecha: rec.fecha, cliente: rec.cliente || '', modelo: rec.modelo || '', telefono: rec.telefono || '', descripcion: `${tipoOf(rec.tipo)[0]}: ${rec.tarea}` });
+  });
+  const save = async () => {
+    let bad = false;
+    const err = (n, msg) => { fgErr(form, n, msg); if (msg) bad = true; };
+    const v = {};
+    v.tipo = val('tipo') || 'otro';
+    v.tarea = val('tarea').trim(); err('tarea', v.tarea ? '' : 'Escribe qué hay que hacer');
+    v.fecha = val('fecha'); err('fecha', validDate(v.fecha) ? '' : 'Pon un día válido');
+    v.hora_inicio = val('hora_inicio') || null; v.hora_fin = val('hora_fin') || null;
+    err('hora_inicio', v.hora_inicio && !HM_RE.test(v.hora_inicio) ? 'Hora no válida' : '');
+    err('hora_fin', !v.hora_fin ? '' : !HM_RE.test(v.hora_fin) ? 'Hora no válida' : !v.hora_inicio ? 'Pon también la hora de inicio' : hm(v.hora_fin) <= hm(v.hora_inicio) ? 'Tiene que ser después del inicio' : '');
+    v.modelo = val('modelo').trim() || null; v.cliente = val('cliente').trim() || null;
+    v.telefono = val('telefono').trim() || null;
+    err('telefono', v.telefono && !/^[+\d][\d\s().-]{5,}$/.test(v.telefono) ? 'Teléfono no válido' : '');
+    v.estado = val('estado') || 'pendiente';
+    v.notas = val('notas').trim() || null;
+    if (bad) { form.querySelector('.fg.bad .field')?.focus(); return; }
+    const btn = m.querySelector('[data-save]'); btn.disabled = true;
+    const res = await saveRecord('cal', v, { id: rec?.id, newId, prevT: rec?._t });
+    btn.disabled = false;
+    if (!res.ok) {
+      m.querySelector('.form-alert').innerHTML = `<div class="alert r">${ICON.info}<p>${res.deleted ? 'Otra persona ha borrado esta tarea mientras la editabas.' : 'Otra persona ha modificado esta tarea mientras la editabas. Cierra y vuelve a abrirla para ver su versión.'}</p></div>`;
+      return;
+    }
+    closeLayer();
+    S.calF.day = v.fecha; S.calF.month = v.fecha.slice(0, 7);
+    render();
+    savedToast(res.saved, rec ? 'Tarea guardada' : 'Tarea añadida al calendario');
+  };
+  m.querySelector('[data-save]').addEventListener('click', save);
+  form.addEventListener('submit', e => { e.preventDefault(); save(); });
+  form.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') { e.preventDefault(); save(); } });
+}
+
 /* ---------- CSV (se abre bien en Excel en español) ---------- */
 function csvCell(v) {
   if (v == null) return '';
@@ -1627,10 +1852,10 @@ async function downloadBackup({ silent = false } = {}) {
     const go = await confirmBox({ title: 'Sin conexión', body: `<p style="margin:0">No he podido comprobar GitHub ahora. ¿Descargo la copia con los datos de este dispositivo?</p>`, ok: 'Descargar igualmente' });
     if (!go) return false;
   }
-  const data = { app: BACKUP_APP, version: 1, exportado: new Date().toISOString(), desde_servidor: fresh, reparaciones: S.rep, moviles: S.mov };
+  const data = { app: BACKUP_APP, version: 1, exportado: new Date().toISOString(), desde_servidor: fresh, reparaciones: S.rep, moviles: S.mov, agenda: S.cal.map(({ _t, ...t }) => t) };
   const now = new Date();
   download(`almantec-copia-${stamp()}-${pad2(now.getHours())}${pad2(now.getMinutes())}.json`, JSON.stringify(data, null, 2), 'application/json');
-  if (!silent) toast(`Copia descargada: ${S.rep.length} reparaciones y ${S.mov.length} móviles`);
+  if (!silent) toast(`Copia descargada: ${S.rep.length} reparaciones, ${S.mov.length} móviles y ${S.cal.length} tareas`);
   return true;
 }
 const pick = (o, cols) => { const r = {}; for (const c of cols) if (c in o) r[c] = o[c] === '' ? null : o[c]; return r; };
@@ -1653,14 +1878,25 @@ function checkBackup(obj) {
     if (bad) errs.push(`Móvil ${i + 1} (${m.marca || ''} ${m.modelo || ''}) tiene datos incompletos o no válidos.`);
     else mov.push({ id: m.id, ...pick(m, MOV_COLS), costes_adicionales: m.costes_adicionales ?? 0, ...(m.creado_en ? { creado_en: m.creado_en } : {}) });
   });
-  return { errs, rep, mov };
+  // Las copias antiguas no traen calendario: cal = null y no se toca el que haya.
+  let cal = null;
+  if (Array.isArray(obj.agenda)) {
+    cal = [];
+    obj.agenda.forEach((t, i) => {
+      const bad = !UUID_RE.test(t.id || '') || !validDate(t.fecha) || !String(t.tarea || '').trim() || !CAL_ESTADO[t.estado]
+        || (t.hora_inicio && !HM_RE.test(t.hora_inicio)) || (t.hora_fin && !HM_RE.test(t.hora_fin));
+      if (bad) errs.push(`Tarea ${i + 1} del calendario (${t.tarea || 'sin texto'}) tiene datos incompletos o no válidos.`);
+      else cal.push({ id: t.id, ...pick(t, CAL_COLS), tipo: CAL_TIPOS[t.tipo] ? t.tipo : 'otro', ...(t.creado_en ? { creado_en: t.creado_en } : {}) });
+    });
+  }
+  return { errs, rep, mov, cal };
 }
 const sameRow = (a, b, cols) => cols.every(c => String(a[c] ?? '') === String(b[c] ?? '') || (Number(a[c]) === Number(b[c]) && a[c] != null && b[c] != null));
 
 async function restoreFlow(file) {
   let obj;
   try { obj = JSON.parse(await file.text()); } catch { toast('Ese archivo no se puede leer como copia (JSON).', 'err'); return; }
-  const { errs, rep, mov } = checkBackup(obj);
+  const { errs, rep, mov, cal } = checkBackup(obj);
   if (!rep) { toast(errs[0], 'err'); return; }
   await Sync.tick({ force: true });
   const cmp = (incoming, current, cols) => {
@@ -1670,18 +1906,19 @@ async function restoreFlow(file) {
     const ids = new Set(incoming.map(r => r.id));
     return { nuevos, cambian, iguales, sobran: current.filter(r => !ids.has(r.id)).length };
   };
-  const cr = cmp(rep, S.rep, REP_COLS), cm = cmp(mov, S.mov, MOV_COLS);
+  const cr = cmp(rep, S.rep, REP_COLS), cm = cmp(mov, S.mov, MOV_COLS), cc = cal ? cmp(cal, S.cal, CAL_COLS) : null;
   const m = openLayer(`
     <div class="modal-h"><h2>Restaurar copia de seguridad</h2><button class="icon-btn sm" data-close aria-label="Cerrar">${ICON.x}</button></div>
     <div class="modal-b">
-      <p style="margin:0">Copia del <b>${esc(fmtDateTime(obj.exportado))}</b>${obj.por ? ` hecha por ${esc(obj.por)}` : ''}: <b>${rep.length}</b> reparaciones y <b>${mov.length}</b> móviles.</p>
+      <p style="margin:0">Copia del <b>${esc(fmtDateTime(obj.exportado))}</b>${obj.por ? ` hecha por ${esc(obj.por)}` : ''}: <b>${rep.length}</b> reparaciones, <b>${mov.length}</b> móviles${cal ? ` y <b>${cal.length}</b> tareas del calendario` : ''}.</p>
       ${errs.length ? `<div class="alert o">${ICON.info}<div><p>${errs.length} registro${errs.length === 1 ? '' : 's'} no se pueden importar y se saltarán:</p><ul>${errs.slice(0, 6).map(e => `<li>${esc(e)}</li>`).join('')}${errs.length > 6 ? `<li>y ${errs.length - 6} más</li>` : ''}</ul></div></div>` : ''}
       <dl class="kv"><dt>Reparaciones nuevas</dt><dd>${cr.nuevos}</dd><dt>Reparaciones que cambian</dt><dd>${cr.cambian}</dd><dt>Reparaciones iguales</dt><dd>${cr.iguales}</dd>
       <dt>Móviles nuevos</dt><dd>${cm.nuevos}</dd><dt>Móviles que cambian</dt><dd>${cm.cambian}</dd><dt>Móviles iguales</dt><dd>${cm.iguales}</dd>
-      <dt>En los datos actuales y no en la copia</dt><dd>${cr.sobran} reparaciones · ${cm.sobran} móviles</dd></dl>
+      ${cc ? `<dt>Tareas nuevas</dt><dd>${cc.nuevos}</dd><dt>Tareas que cambian</dt><dd>${cc.cambian}</dd>` : ''}
+      <dt>En los datos actuales y no en la copia</dt><dd>${cr.sobran} reparaciones · ${cm.sobran} móviles${cc ? ` · ${cc.sobran} tareas` : ''}</dd></dl>
       <div class="fg"><span class="lbl">Cómo restaurar</span>
         <label class="check"><input type="radio" name="mode" value="merge" checked><span><b>Añadir y actualizar</b> (recomendado). Añade lo nuevo y actualiza lo que cambió. No borra nada.</span></label>
-        <label class="check"><input type="radio" name="mode" value="replace"><span><b>Dejar exactamente como la copia.</b> Además borra ${cr.sobran} reparaciones y ${cm.sobran} móviles que no están en la copia. Antes se descarga una copia de lo actual.</span></label>
+        <label class="check"><input type="radio" name="mode" value="replace"><span><b>Dejar exactamente como la copia.</b> Además borra ${cr.sobran} reparaciones, ${cm.sobran} móviles${cc ? ` y ${cc.sobran} tareas` : ''} que no están en la copia. Antes se descarga una copia de lo actual.</span></label>
       </div>
       <div class="form-alert"></div>
     </div>
@@ -1690,7 +1927,7 @@ async function restoreFlow(file) {
     const mode = m.querySelector('input[name="mode"]:checked').value;
     const btn = m.querySelector('[data-go]');
     if (mode === 'replace') {
-      const ok = await confirmBox({ title: '¿Seguro?', body: `<p style="margin:0">Se borrarán ${cr.sobran} reparaciones y ${cm.sobran} móviles que no están en la copia, para todos los dispositivos. Antes descargaré una copia de los datos actuales.</p>`, ok: 'Sí, dejarlo como la copia', danger: true });
+      const ok = await confirmBox({ title: '¿Seguro?', body: `<p style="margin:0">Se borrarán ${cr.sobran} reparaciones, ${cm.sobran} móviles${cc ? ` y ${cc.sobran} tareas` : ''} que no están en la copia, para todos los dispositivos. Antes descargaré una copia de los datos actuales.</p>`, ok: 'Sí, dejarlo como la copia', danger: true });
       if (!ok) return;
     }
     btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Restaurando…';
@@ -1698,16 +1935,17 @@ async function restoreFlow(file) {
     try {
       if (mode === 'replace' && !(await downloadBackup({ silent: true }))) throw new Error('no se pudo hacer la copia previa');
       const now = new Date().toISOString();
-      for (const [kind, rows] of [['rep', rep], ['mov', mov]]) {
+      const colsOf = { rep: REP_COLS, mov: MOV_COLS, cal: CAL_COLS };
+      for (const [kind, rows] of [['rep', rep], ['mov', mov], ['cal', cal || []]]) {
         for (const r of rows) {
           const cur = Sync.docs[COLS[kind] + '/' + r.id];
           const { id, ...data } = r;
-          if (cur && !cur.x && sameRow(data, cur.d, kind === 'rep' ? REP_COLS : MOV_COLS)) continue;
+          if (cur && !cur.x && sameRow(data, cur.d, colsOf[kind])) continue;
           Sync.write(COLS[kind], id, { ...data, creado_en: data.creado_en || now, actualizado_en: now });
         }
       }
       if (mode === 'replace') {
-        for (const [kind, rows, current] of [['rep', rep, S.rep], ['mov', mov, S.mov]]) {
+        for (const [kind, rows, current] of [['rep', rep, S.rep], ['mov', mov, S.mov], ...(cal ? [['cal', cal, S.cal]] : [])]) {
           const keep = new Set(rows.map(r => r.id));
           current.filter(r => !keep.has(r.id)).forEach(r => Sync.write(COLS[kind], r.id, null));
         }
@@ -1716,14 +1954,14 @@ async function restoreFlow(file) {
       const saved = await Sync.flush(30000);
 
       // Comprobación: todo lo de la copia está ahora en la base de datos.
-      const have = new Set([...S.rep, ...S.mov].map(r => r.id));
-      const missing = [...rep, ...mov].filter(r => !have.has(r.id)).length;
+      const have = new Set([...S.rep, ...S.mov, ...S.cal].map(r => r.id));
+      const missing = [...rep, ...mov, ...(cal || [])].filter(r => !have.has(r.id)).length;
       if (entry) entry.busy = false;
       closeLayer();
       render();
       if (missing) toast(`Restaurado, pero faltan ${missing} registros. Vuelve a intentarlo.`, 'err');
       else if (!saved) toast('Copia restaurada en este dispositivo. Sin conexión con GitHub: se subirá sola al volver la conexión.', 'warn', 8000);
-      else toast(`Copia restaurada, comprobada y subida a GitHub: ${rep.length} reparaciones y ${mov.length} móviles`);
+      else toast(`Copia restaurada, comprobada y subida a GitHub: ${rep.length} reparaciones${cal ? `, ${mov.length} móviles y ${cal.length} tareas` : ` y ${mov.length} móviles`}`);
     } catch (e) {
       if (entry) entry.busy = false;
       btn.disabled = false; btn.textContent = 'Restaurar';

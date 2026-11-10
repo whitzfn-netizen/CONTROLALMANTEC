@@ -48,6 +48,77 @@ svg.i{width:18px;height:18px;flex:none;stroke:currentColor;fill:none;stroke-widt
 svg.i.s{width:15px;height:15px}
 .c-g{color:var(--green)} .c-r{color:var(--red)} .c-b{color:var(--blue)} .c-o{color:var(--orange)}
 
+/* Calendario */
+.cal-layout{display:grid;grid-template-columns:minmax(0,1fr) 370px;gap:16px;align-items:start}
+.cal{padding:14px}
+.cal-wk,.cal-g{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+.cal-wk span{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);text-align:center;padding:2px 0 8px;font-weight:500}
+.cal-d{position:relative;min-height:116px;display:flex;flex-direction:column;gap:4px;align-items:stretch;text-align:left;padding:8px 7px 12px;border-radius:11px;border:1px solid var(--line);background:var(--bg-2);overflow:hidden;min-width:0;transition:border-color .15s,background .15s}
+.cal-d:hover{border-color:var(--line-2);background:var(--card-2)}
+.cal-d.we{background:#111418}
+.cal-d.out{opacity:.35}
+.cal-d .dn{display:flex;justify-content:space-between;align-items:center;gap:4px;min-height:22px}
+.cal-d .dn b{font-family:var(--f-display);font-weight:600;font-size:13px;color:var(--fg-2);min-width:22px;height:22px;display:grid;place-items:center;border-radius:99px}
+.cal-d.today .dn b{background:var(--green);color:#06140d}
+.cal-d.sel{border-color:var(--fg-2);background:var(--card-2);box-shadow:0 0 0 1px var(--fg-2) inset}
+.rc{font-size:10.5px;color:var(--muted);display:inline-flex;gap:2px;align-items:center;font-variant-numeric:tabular-nums}
+.rc svg.i{width:11px;height:11px}
+.ev{display:block;font-size:11.5px;line-height:1.3;padding:3px 6px 3px 7px;border-radius:6px;background:color-mix(in srgb,var(--c) 20%,transparent);box-shadow:inset 3px 0 0 var(--c);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--fg)}
+.ev b{font-family:var(--f-mono);font-weight:500;font-size:10.5px;color:var(--fg-2);margin-right:5px}
+.ev.done{opacity:.45;text-decoration:line-through}
+.ev-more{font-size:11px;color:var(--muted);padding-left:4px}
+.dots{display:none;gap:3px;flex-wrap:wrap;justify-content:center}
+.dots i{width:7px;height:7px;border-radius:50%;background:var(--c)}
+.dots i.done{opacity:.35}
+.load{position:absolute;left:7px;right:7px;bottom:5px;height:3px;border-radius:2px;background:var(--line)}
+.load i{display:block;height:100%;border-radius:2px;background:var(--fg-2);opacity:.65}
+.prog{display:block;height:5px;border-radius:3px;background:var(--line);margin-top:4px;overflow:hidden}
+.prog i{display:block;height:100%;background:var(--green);border-radius:3px}
+.day-p{padding:16px;display:flex;flex-direction:column;gap:14px;position:sticky;top:12px}
+.day-h{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.day-h h3{font-family:var(--f-display);font-size:16px;font-weight:600;margin:0;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.day-h p{margin:3px 0 0;color:var(--muted);font-size:12.5px}
+.tasks{display:flex;flex-direction:column;gap:8px}
+.task{display:grid;grid-template-columns:4px minmax(0,1fr) auto;gap:12px;align-items:start;padding:12px;border-radius:12px;background:var(--bg-2);border:1px solid var(--line);cursor:pointer;transition:border-color .15s}
+.task:hover{border-color:var(--line-2)}
+.task .bar{align-self:stretch;border-radius:4px;background:var(--c)}
+.task .tm{font-family:var(--f-mono);font-size:12px;color:var(--fg-2)}
+.task h4{margin:3px 0 6px;font-size:14.5px;font-weight:600;line-height:1.3;overflow-wrap:anywhere}
+.task .meta{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;font-size:12.5px;color:var(--muted)}
+.task .tp{display:inline-flex;gap:6px;align-items:center;color:var(--fg-2)}
+.task .tp i{width:8px;height:8px;border-radius:50%;background:var(--c)}
+.task .nt{margin:6px 0 0;font-size:12.5px;color:var(--muted);white-space:pre-wrap}
+.task.done{opacity:.6}
+.task.done h4{text-decoration:line-through;color:var(--fg-2)}
+.tick{width:32px;height:32px;border-radius:50%;border:1.5px solid var(--line-2);background:none;display:grid;place-items:center;color:transparent;transition:all .15s}
+.tick:hover{border-color:var(--green);color:var(--green)}
+.tick[aria-pressed="true"]{background:var(--green);border-color:var(--green);color:#06140d}
+.day-empty{border:1px dashed var(--line-2);border-radius:12px;padding:22px 16px;text-align:center;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:8px}
+.day-empty p{margin:0;font-size:13px}
+.day-reps{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--line);padding-top:12px}
+.day-reps h5{margin:0 0 2px;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:500}
+.rep-l{display:flex;justify-content:space-between;align-items:center;gap:8px;text-align:left;border:1px solid var(--line);background:none;border-radius:10px;padding:8px 10px;font-size:13px;color:var(--fg-2)}
+.rep-l:hover{border-color:var(--line-2);color:var(--fg)}
+.rep-l span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tipos{display:flex;flex-wrap:wrap;gap:6px}
+.tipos input{position:absolute;opacity:0;pointer-events:none}
+.tipos label{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:99px;padding:6px 12px;font-size:13px;cursor:pointer;color:var(--fg-2)}
+.tipos label i{width:9px;height:9px;border-radius:50%;background:var(--c)}
+.tipos input:checked+label{background:color-mix(in srgb,var(--c) 22%,transparent);border-color:var(--c);color:var(--fg)}
+.tipos input:focus-visible+label{outline:2px solid var(--blue);outline-offset:2px}
+@media (max-width:1100px){ .cal-layout{grid-template-columns:1fr} .day-p{position:static} }
+@media (max-width:700px){
+  .cal{padding:8px}
+  .cal-wk,.cal-g{gap:4px}
+  .cal-d{min-height:62px;padding:5px 3px 9px;gap:5px;align-items:center;border-radius:9px}
+  .cal-d .dn{justify-content:center}
+  .cal-d .rc{position:absolute;top:3px;right:4px} .cal-d .rc span{display:none}
+  .ev,.ev-more{display:none}
+  #view-cal #cK{order:1}
+  .dots{display:flex}
+  .load{left:5px;right:5px;bottom:4px}
+}
+
 /* Cabecera */
 header.top{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap}
 .brand{display:flex;gap:14px;align-items:center;min-width:0}
@@ -387,6 +458,7 @@ textarea.field{resize:vertical;min-height:72px}
 
   <nav class="maintabs" id="mainTabs" role="tablist" aria-label="Secciones" hidden>
     <button type="button" role="tab" data-tab="dash" aria-selected="true">Dashboard</button>
+    <button type="button" role="tab" data-tab="cal" aria-selected="false">Calendario<span class="tab-n" id="tabCalN" hidden></span></button>
     <button type="button" role="tab" data-tab="rep" aria-selected="false">Reparaciones<span class="tab-n" id="tabRepN" hidden></span></button>
     <button type="button" role="tab" data-tab="mov" aria-selected="false">Móviles<span class="tab-n" id="tabMovN" hidden></span></button>
     <button type="button" role="tab" data-tab="mes" aria-selected="false">Resumen mensual</button>
